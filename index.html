@@ -1,0 +1,1946 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Conway's Game of Life — Interactive Explainer</title>
+<meta name="description" content="A scrolling, hands-on explainer of Conway's Game of Life: the grid, the four rules, famous patterns, emergence, and a full sandbox.">
+<meta name="color-scheme" content="dark light">
+<script>
+(function () {
+  var d = document.documentElement, t = null;
+  d.classList.add('js');
+  try { t = localStorage.getItem('life-theme'); } catch (e) {}
+  if (t !== 'light' && t !== 'dark') {
+    t = (window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+  }
+  d.setAttribute('data-theme', t);
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0b0f14; --surface: #121821; --surface2: #182130; --stage-bg: #090c11;
+  --text: #e6edf3; --muted: #8b98a5; --border: #243044;
+  --live: #5eead4; --glow: rgba(94, 234, 212, .55);
+  --birth: #4ade80; --death: #f87171;
+  --accent: #5eead4; --accent-text: #5eead4; --accent-soft: rgba(94, 234, 212, .16);
+  --on-accent: #04201c; --focus: #7ff5e2;
+  --board-bg: #0e141c; --grid: rgba(255, 255, 255, .06); --tint: rgba(94, 234, 212, .26);
+  --age1: #fef08a; --age2: #fdba74; --age3: #f9a8d4; --age4: #a5b4fc; --age5: #5eead4;
+  --veil: rgba(11, 15, 20, .86); --shadow: 0 10px 40px rgba(0, 0, 0, .35);
+  --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f8fa; --surface: #ffffff; --surface2: #eef2f6; --stage-bg: #e4eaf1;
+  --text: #14202b; --muted: #566574; --border: #d0dae5;
+  --live: #0d9488; --glow: rgba(13, 148, 136, .4);
+  --birth: #16a34a; --death: #dc2626;
+  --accent: #0f766e; --accent-text: #0f766e; --accent-soft: rgba(15, 118, 110, .12);
+  --on-accent: #ffffff; --focus: #0f766e;
+  --board-bg: #f8fafc; --grid: rgba(0, 0, 0, .08); --tint: rgba(15, 118, 110, .22);
+  --age1: #ca8a04; --age2: #ea580c; --age3: #db2777; --age4: #4f46e5; --age5: #0d9488;
+  --veil: rgba(246, 248, 250, .88); --shadow: 0 10px 34px rgba(30, 50, 80, .12);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 400 1.0625rem/1.65 var(--sans); -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+img, canvas, svg { max-width: 100%; }
+a { color: var(--accent-text); text-underline-offset: 3px; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.sr-only { position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.skip { position: absolute; left: 16px; top: -60px; z-index: 100; background: var(--accent); color: var(--on-accent); padding: 10px 16px; border-radius: 999px; font-weight: 600; text-decoration: none; }
+.skip:focus { top: 12px; }
+.mono { font-family: var(--mono); }
+noscript .ns { max-width: 680px; margin: 40px auto; padding: 0 16px; }
+
+/* ---------- layout ---------- */
+.wrap { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+.section { padding: clamp(48px, 9vw, 104px) 0; position: relative; }
+.section + .section { border-top: 1px solid var(--border); }
+.split { display: grid; gap: 28px; grid-template-columns: minmax(0, 1fr); align-items: center; }
+@media (min-width: 900px) { .split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; } }
+.prose { max-width: 680px; min-width: 0; }
+.prose p { margin: 0 0 1em; color: var(--text); }
+.prose p.muted, .muted { color: var(--muted); }
+.kicker { font: 600 .78rem/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--accent-text); margin: 0 0 16px; }
+h1, h2, h3 { letter-spacing: -.02em; }
+h2 { font-size: clamp(1.7rem, 4.2vw, 2.55rem); line-height: 1.15; margin: 0 0 .55em; }
+h3 { font-size: 1.1rem; line-height: 1.3; margin: 0 0 .4em; }
+.intro { margin-bottom: 36px; }
+
+/* scroll reveal */
+.js .reveal { opacity: 0; transform: translateY(26px); transition: opacity .7s ease, transform .7s ease; }
+.js .reveal.in { opacity: 1; transform: none; }
+
+/* ---------- controls ---------- */
+.btn {
+  appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: .5em;
+  min-height: 44px; min-width: 44px; padding: 0 18px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface2); color: var(--text);
+  font: 600 .9rem/1 var(--sans); cursor: pointer; white-space: nowrap; text-decoration: none;
+  transition: background .15s, border-color .15s, transform .06s, filter .15s;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:active { transform: translateY(1px) scale(.98); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.big { min-height: 52px; padding: 0 28px; font-size: 1rem; }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn:disabled:hover { border-color: var(--border); }
+.btn.icon { padding: 0; width: 44px; }
+
+.chip {
+  position: relative; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--surface2);
+  font: 500 .88rem/1 var(--sans); user-select: none; cursor: pointer; transition: background .15s, border-color .15s;
+}
+.chip:hover { border-color: var(--accent); }
+.chip input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.chip .dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--muted); flex: none; }
+.chip.sq .dot { border-radius: 3px; }
+.chip:has(input:checked) { background: var(--accent-soft); border-color: var(--accent); }
+.chip:has(input:checked) .dot { background: var(--accent); border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--surface2); }
+.chip:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.field { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: .88rem; color: var(--muted); }
+.field input[type=range] { flex: 1 1 110px; min-width: 90px; height: 44px; margin: 0; accent-color: var(--accent); background: transparent; }
+.field .val { font-family: var(--mono); font-size: .82rem; color: var(--text); min-width: 4.4em; }
+select, input[type=text], textarea {
+  min-height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface2); color: var(--text);
+  padding: 0 12px; font: 500 .9rem var(--sans); max-width: 100%;
+}
+select { padding-right: 8px; }
+textarea { padding: 10px 12px; font-family: var(--mono); font-size: .8rem; width: 100%; min-height: 120px; resize: vertical; }
+input[aria-invalid="true"] { border-color: var(--death); }
+label.lbl { font-size: .78rem; color: var(--muted); font-weight: 500; }
+
+/* ---------- hero ---------- */
+.hero { position: relative; min-height: 100vh; min-height: 100svh; display: grid; place-items: center; text-align: center; overflow: hidden; padding: 96px 16px 72px; isolation: isolate; }
+.hero-bg { position: absolute; inset: 0; z-index: -2; }
+.hero-bg canvas { display: block; width: 100%; height: 100%; max-width: none; }
+.hero::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(ellipse 60% 55% at 50% 48%, var(--veil) 0%, var(--veil) 35%, transparent 100%), linear-gradient(to bottom, transparent 75%, var(--bg) 100%); }
+.hero-inner { max-width: 760px; }
+.eyebrow { font: 600 .78rem/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--accent-text); margin: 0 0 20px; }
+.hero h1 { font-size: clamp(2.5rem, 8.5vw, 5.4rem); line-height: 1.02; letter-spacing: -.035em; margin: 0 0 20px; font-weight: 700; }
+.hero h1 span { color: var(--accent-text); }
+.lede { font-size: clamp(1.05rem, 2.4vw, 1.3rem); color: var(--muted); margin: 0 auto 32px; max-width: 34em; }
+.theme-toggle { position: fixed; top: 12px; right: 12px; z-index: 60; width: 44px; height: 44px; border-radius: 50%; padding: 0;
+  background: var(--surface); box-shadow: var(--shadow); font-size: 1.15rem; }
+
+/* ---------- demo cards ---------- */
+.demo { background: var(--surface); border: 1px solid var(--border); border-radius: 22px; padding: 16px; box-shadow: var(--shadow); min-width: 0; }
+.board-box { width: 100%; display: flex; justify-content: center; align-items: center; min-width: 0; }
+.board-box canvas { display: block; border-radius: 12px; max-width: none; }
+.board-box canvas, .sb-stage canvas { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.demo-bar { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-top: 14px; }
+.demo-bar .grow { flex: 1 1 0; min-width: 0; }
+.stat { font: 500 .85rem var(--mono); color: var(--muted); }
+.stat b { color: var(--text); font-weight: 600; }
+.badge { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px dashed var(--border); font: 500 .9rem var(--sans); color: var(--muted); }
+.badge b { font: 700 1.15rem var(--mono); color: var(--text); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .8rem; color: var(--muted); margin-top: 10px; }
+.legend i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 6px; }
+.legend .lb { background: var(--birth); box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--birth); }
+.legend .ld { border: 2px solid var(--death); background: linear-gradient(to top right, transparent 44%, var(--death) 46%, var(--death) 54%, transparent 56%); }
+
+/* rules */
+.rules-grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 760px) { .rules-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; } }
+.rule-card { background: var(--surface); border: 1px solid var(--border); border-radius: 22px; padding: 20px; box-shadow: var(--shadow); display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); align-content: start; min-width: 0; }
+.rule-card h3 { display: flex; align-items: center; gap: 10px; margin: 0; }
+.rule-card .num { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-text); font: 700 .85rem var(--mono); }
+.rule-card p { margin: 0; color: var(--muted); font-size: .98rem; }
+.rule-card p b { color: var(--text); }
+.rule-card .board-box { padding: 6px 0; }
+.rule-card .outcome { font: 500 .85rem/1.4 var(--mono); color: var(--text); min-height: 2.8em; }
+.rule-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.key { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .82rem; color: var(--muted); margin-top: 18px; }
+.key i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 6px; }
+.key .kf { border: 2.5px solid var(--text); }
+.key .kn { background: var(--tint); border: 1px solid var(--accent); }
+
+/* zoo */
+.zoo-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+.zoo-cat { grid-column: 1 / -1; margin: 18px 0 -2px; font: 600 .78rem/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.zoo-cat:first-child { margin-top: 0; }
+.zoo-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.zoo-card .board-box { min-height: 120px; }
+.zoo-card h3 { margin: 4px 0 0; }
+.zoo-card p { margin: 0; font-size: .9rem; color: var(--muted); line-height: 1.5; flex: 1; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { font: 500 .72rem/1 var(--mono); padding: 5px 9px; border-radius: 999px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); }
+.zoo-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.zoo-actions .btn { padding: 0 14px; font-size: .82rem; }
+
+/* emergence */
+.emerge { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .emerge { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.emerge .demo h3 { margin: 4px 0 4px; }
+.emerge .demo > p { margin: 0 0 12px; color: var(--muted); font-size: .92rem; }
+.spark { display: block; width: 100%; height: 56px; border-radius: 10px; background: var(--board-bg); margin-top: 12px; }
+
+/* sandbox */
+.sb { margin-top: 28px; display: grid; gap: 12px; }
+.sb-toolbar { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 12px; display: grid; gap: 10px; box-shadow: var(--shadow); }
+.sb-row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.sb-row .field { flex: 1 1 220px; }
+.sb-group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sb-rule { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sb-rule input[type=text] { width: 9.5em; font-family: var(--mono); }
+.sb-sep { flex: 1 1 100%; height: 0; border-top: 1px solid var(--border); margin: 2px 0; }
+.sb-stage { position: relative; height: clamp(340px, 66vh, 720px); border-radius: 18px; overflow: hidden; border: 1px solid var(--border); background: var(--stage-bg); box-shadow: var(--shadow); }
+.sb-stage canvas { display: block; width: 100%; height: 100%; max-width: none; border-radius: 0; }
+.sb-stats { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 10px 16px; }
+.sb-stats canvas.spark { flex: 1 1 200px; width: auto; min-width: 140px; max-width: 100%; margin: 0; height: 44px; }
+.sb-hint { margin: 0; color: var(--muted); font-size: .85rem; min-height: 1.4em; }
+.sb-rule-note { margin: 0; }
+.sb-rule-note .sb-msg { min-height: 0; display: inline; }
+.sb-rule-note:has(.sb-msg:empty) { display: none; }
+.sb-msg { margin: 0; min-height: 1.4em; font-size: .88rem; color: var(--accent-text); }
+.sb-msg.err { color: var(--death); }
+.sb-io { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 14px; display: grid; gap: 10px; }
+.sb-io[hidden] { display: none; }
+details.keys { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 0 16px; }
+details.keys summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 600; font-size: .92rem; }
+details.keys dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0 0 14px; font-size: .88rem; }
+details.keys dt { font-family: var(--mono); color: var(--accent-text); }
+details.keys dd { margin: 0; color: var(--muted); }
+kbd { font: 600 .78rem var(--mono); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px; padding: 2px 6px; background: var(--surface2); }
+
+/* further */
+.cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 22px; min-width: 0; }
+.card h3 { margin-bottom: .5em; }
+.card p { margin: 0 0 .8em; color: var(--muted); font-size: .96rem; }
+.card ul { margin: 0; padding-left: 1.1em; color: var(--muted); font-size: .96rem; }
+.card li { margin-bottom: .4em; }
+.rule-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.rule-links .btn { font-size: .8rem; padding: 0 14px; }
+footer { padding: 40px 0 64px; border-top: 1px solid var(--border); color: var(--muted); font-size: .9rem; text-align: center; }
+
+@media (max-width: 520px) {
+  .sb-rule input[type=text] { width: 8em; }
+  .demo, .rule-card { padding: 14px; border-radius: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .js .reveal { opacity: 1; transform: none; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#grid">Skip to content</a>
+<noscript><div class="ns"><h1>Conway's Game of Life</h1><p>This interactive explainer needs JavaScript to run the simulations.</p></div></noscript>
+
+<button class="btn icon theme-toggle" id="themeToggle" type="button" aria-label="Switch to light theme" title="Toggle light / dark theme"><span aria-hidden="true">☀</span></button>
+
+<header class="hero" id="top">
+  <div class="hero-bg"><canvas id="cv-hero" role="img" aria-label="Decorative background: a random soup of glowing cells evolving under Conway's rules"></canvas></div>
+  <div class="hero-inner">
+    <p class="eyebrow">An interactive explainer</p>
+    <h1>Conway's <span>Game of Life</span></h1>
+    <p class="lede">Four tiny rules. One grid of squares. Endless surprise. Poke at it, step through it, and build worlds of your own.</p>
+    <a class="btn primary big" id="startBtn" href="#grid">Start exploring ↓</a>
+  </div>
+</header>
+
+<main>
+<!-- 2.2 The grid -->
+<section class="section reveal" id="grid" aria-labelledby="h-grid">
+  <div class="wrap split">
+    <div class="prose">
+      <p class="kicker">01 · The grid</p>
+      <h2 id="h-grid">A universe made of squares</h2>
+      <p>Picture an endless sheet of graph paper. Every square — a <strong>cell</strong> — is in exactly one of two states: <strong>alive</strong> or <strong>dead</strong>. That's the whole universe.</p>
+      <p class="muted">Ours is a small window onto it. Tap or click a cell to flip it. Keyboard: arrow keys to move, <kbd>Enter</kbd> to flip. Nothing moves yet — time hasn't started.</p>
+    </div>
+    <div class="demo">
+      <div class="board-box"><canvas id="cv-grid" role="img" aria-label="Interactive 10 by 10 grid of cells. Tap a cell to toggle it, or use the arrow keys and Enter."></canvas></div>
+      <div class="demo-bar">
+        <span class="stat">Alive: <b id="grid-count">0</b> / 100</span>
+        <span class="grow"></span>
+        <button class="btn" id="grid-rand" type="button">Randomize</button>
+        <button class="btn" id="grid-clear" type="button">Clear</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2.3 Neighbors -->
+<section class="section reveal" id="neighbors" aria-labelledby="h-nb">
+  <div class="wrap split">
+    <div class="prose">
+      <p class="kicker">02 · Neighbors</p>
+      <h2 id="h-nb">Every cell has eight neighbors</h2>
+      <p>A cell's neighbors are the eight squares touching it — up, down, left, right, and the four diagonals. Everything that happens in the game depends only on <em>how many of those eight are alive</em>.</p>
+      <p class="muted">Hover (or tap) a cell to light up its neighborhood. Tap also flips the cell, so you can watch the count change. Cells on the border of this little window simply have fewer neighbors.</p>
+    </div>
+    <div class="demo">
+      <div class="board-box"><canvas id="cv-nb" role="img" aria-label="Interactive 9 by 9 grid. Hover or select a cell to highlight its eight neighbors and count the live ones."></canvas></div>
+      <div class="demo-bar">
+        <span class="badge" id="nb-badge" role="status">Live neighbors: <b id="nb-count">–</b></span>
+        <span class="stat" id="nb-pos">Hover or tap a cell</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2.4 The four rules -->
+<section class="section reveal" id="rules" aria-labelledby="h-rules">
+  <div class="wrap">
+    <div class="prose intro">
+      <p class="kicker">03 · The four rules</p>
+      <h2 id="h-rules">Birth, survival, and death</h2>
+      <p>Time moves in ticks called <strong>generations</strong>. On every tick, <em>all</em> cells update at once, using just four rules. Each card below shows one rule in action — flip between <em>Before</em> and <em>After</em>, or press Play.</p>
+    </div>
+    <div class="rules-grid" id="rulesGrid"></div>
+    <div class="key" aria-hidden="true"><span><i class="kf"></i>Focal cell (outlined)</span><span><i class="kn"></i>Its eight neighbors (tinted)</span></div>
+  </div>
+</section>
+
+<!-- 2.5 Step by step -->
+<section class="section reveal" id="steps" aria-labelledby="h-steps">
+  <div class="wrap split">
+    <div class="prose">
+      <p class="kicker">04 · Step by step</p>
+      <h2 id="h-steps">Watch one generation at a time</h2>
+      <p>This is the <strong>R-pentomino</strong>: just five cells, but it churns for over a thousand generations on an infinite grid before settling down. Step forward, go back, or drag the scrubber through history.</p>
+      <p class="muted">Turn on <em>Show changes</em> to see exactly which cells were born and which died. (Here the edges wrap around like a donut, so nothing falls off the board.)</p>
+    </div>
+    <div class="demo">
+      <div class="board-box"><canvas id="cv-step" role="img" aria-label="20 by 20 board showing the R-pentomino pattern evolving one generation at a time."></canvas></div>
+      <div class="demo-bar">
+        <button class="btn" id="step-back" type="button" aria-label="Previous generation">◀ Back</button>
+        <button class="btn primary" id="step-next" type="button" aria-label="Next generation">Next ▶</button>
+        <button class="btn" id="step-play" type="button">Play</button>
+        <span class="grow"></span>
+        <label class="chip sq"><input type="checkbox" id="step-changes" checked><span class="dot" aria-hidden="true"></span>Show changes</label>
+      </div>
+      <div class="field"><label for="step-scrub" class="sr-only">Generation scrubber</label><span class="stat">Gen <b id="step-gen">0</b></span><input type="range" id="step-scrub" min="0" max="0" value="0" step="1" aria-label="Scrub through generations"><span class="stat">Pop <b id="step-pop">0</b></span></div>
+      <div class="legend" aria-hidden="true"><span><i class="lb"></i>Born (filled, ringed)</span><span><i class="ld"></i>Died (hollow, slashed)</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 2.6 Pattern zoo -->
+<section class="section reveal" id="zoo" aria-labelledby="h-zoo">
+  <div class="wrap">
+    <div class="prose intro">
+      <p class="kicker">05 · Pattern zoo</p>
+      <h2 id="h-zoo">A field guide to the residents</h2>
+      <p>Out of the four rules, a menagerie appears. <strong>Still lifes</strong> never change. <strong>Oscillators</strong> repeat after a fixed <em>period</em>. <strong>Spaceships</strong> crawl across the grid. Press <em>Try in sandbox</em> on any card to drop it into the sandbox.</p>
+    </div>
+    <div class="zoo-grid" id="zooGrid"></div>
+  </div>
+</section>
+
+<!-- 2.7 Emergence -->
+<section class="section reveal" id="emergence" aria-labelledby="h-em">
+  <div class="wrap">
+    <div class="prose intro">
+      <p class="kicker">06 · Emergence</p>
+      <h2 id="h-em">Simple rules, complex worlds</h2>
+      <p>Nothing in the rules mentions gliders, guns, or oscillators — yet they appear anyway. Complex global behavior emerges from nothing but local, identical, mindless rules.</p>
+    </div>
+    <div class="emerge">
+      <div class="demo">
+        <h3>The Gosper glider gun</h3>
+        <p>Found in 1970 by Bill Gosper, it fires a new glider every 30 generations, forever. Edges don't wrap here — gliders sail off the board.</p>
+        <div class="board-box"><canvas id="cv-gun" role="img" aria-label="Gosper glider gun on a wide board, emitting a steady stream of gliders toward the lower right."></canvas></div>
+        <div class="demo-bar">
+          <button class="btn primary" id="gun-play" type="button">Play</button>
+          <button class="btn" id="gun-restart" type="button">Restart</button>
+          <span class="grow"></span>
+          <span class="stat">Gen <b id="gun-gen">0</b> · Pop <b id="gun-pop">0</b></span>
+        </div>
+      </div>
+      <div class="demo">
+        <h3>Random soup</h3>
+        <p>Start from pure noise and watch the chaos settle into islands of still lifes and blinkers. The line charts the population.</p>
+        <div class="board-box"><canvas id="cv-soup" role="img" aria-label="A 56 by 36 board of randomly seeded cells evolving and gradually settling down."></canvas></div>
+        <canvas class="spark" id="soup-spark" role="img" aria-label="Population over time chart"></canvas>
+        <div class="demo-bar">
+          <button class="btn primary" id="soup-new" type="button">Random soup</button>
+          <button class="btn" id="soup-play" type="button">Pause</button>
+          <span class="grow"></span>
+          <span class="stat">Gen <b id="soup-gen">0</b> · Pop <b id="soup-pop">0</b></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2.8 Sandbox -->
+<section class="section reveal" id="sandbox" aria-labelledby="h-sb">
+  <div class="wrap">
+    <div class="prose">
+      <p class="kicker">07 · Sandbox</p>
+      <h2 id="h-sb">Your turn</h2>
+      <p>A big board with everything unlocked: draw, stamp patterns, change the rules, zoom, pan, and share what you build with a link.</p>
+    </div>
+    <div class="sb">
+      <div class="sb-toolbar" role="group" aria-label="Playback and drawing controls">
+        <div class="sb-row">
+          <button class="btn primary" id="sb-play" type="button" style="min-width:96px">Play</button>
+          <button class="btn" id="sb-back" type="button" aria-label="Step back one generation">◀ Back</button>
+          <button class="btn" id="sb-step" type="button" aria-label="Step forward one generation">Step ▶</button>
+          <button class="btn" id="sb-clear" type="button">Clear</button>
+          <div class="sb-group" role="group" aria-label="View">
+            <button class="btn icon" id="sb-zoom-out" type="button" aria-label="Zoom out">−</button>
+            <button class="btn icon" id="sb-zoom-in" type="button" aria-label="Zoom in">+</button>
+            <button class="btn" id="sb-fit" type="button">Fit</button>
+          </div>
+        </div>
+        <div class="sb-row">
+          <div class="sb-group" role="radiogroup" aria-label="Pointer tool">
+            <label class="chip"><input type="radio" name="sb-tool" value="draw" checked><span class="dot" aria-hidden="true"></span>Draw</label>
+            <label class="chip"><input type="radio" name="sb-tool" value="erase"><span class="dot" aria-hidden="true"></span>Erase</label>
+            <label class="chip"><input type="radio" name="sb-tool" value="pan"><span class="dot" aria-hidden="true"></span>Pan</label>
+          </div>
+          <div class="sb-group">
+            <label class="lbl" for="sb-pattern">Stamp</label>
+            <select id="sb-pattern" aria-describedby="sb-hint"><option value="">None (freehand)</option></select>
+            <button class="btn" id="sb-rotate" type="button" aria-label="Rotate stamp (R)" title="Rotate (R)">⟳ Rotate</button>
+            <button class="btn" id="sb-flip" type="button" aria-label="Flip stamp (F)" title="Flip (F)">⇋ Flip</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sb-stage"><canvas id="sb-canvas" tabindex="0" role="img" aria-label="Sandbox board, 200 by 120 cells."></canvas></div>
+      <p class="sb-hint" id="sb-hint">Draw with a click or touch. Right-drag, Space+drag, or two fingers to pan; wheel or pinch to zoom.</p>
+
+      <div class="sb-stats">
+        <span class="stat">Generation <b id="sb-gen">0</b></span>
+        <span class="stat">Population <b id="sb-pop">0</b></span>
+        <canvas class="spark" id="sb-spark" role="img" aria-label="Population over the last 200 generations"></canvas>
+      </div>
+      <div class="sr-only" id="sb-live" aria-live="polite" aria-atomic="true"></div>
+
+      <div class="sb-toolbar" role="group" aria-label="Speed, rules and display options">
+        <div class="sb-row">
+          <label class="field" for="sb-speed"><span>Speed</span><input type="range" id="sb-speed" min="1" max="60" value="10"><span class="val" id="sb-speed-val">10 gen/s</span></label>
+          <button class="btn" id="sb-random" type="button">Randomize</button>
+          <label class="field" for="sb-density"><span>Density</span><input type="range" id="sb-density" min="10" max="60" value="30"><span class="val" id="sb-density-val">30%</span></label>
+        </div>
+        <div class="sb-sep" aria-hidden="true"></div>
+        <div class="sb-row">
+          <div class="sb-rule">
+            <label class="lbl" for="sb-preset">Rule</label>
+            <select id="sb-preset">
+              <option value="B3/S23">Conway's Life (B3/S23)</option>
+              <option value="B36/S23">HighLife (B36/S23)</option>
+              <option value="B2/S">Seeds (B2/S)</option>
+              <option value="B3678/S34678">Day &amp; Night (B3678/S34678)</option>
+              <option value="custom">Custom…</option>
+            </select>
+            <label class="sr-only" for="sb-rule">Custom rule in B/S notation</label>
+            <input type="text" id="sb-rule" value="B3/S23" spellcheck="false" autocomplete="off" autocapitalize="characters" aria-describedby="sb-rule-msg">
+          </div>
+          <label class="chip sq"><input type="checkbox" id="sb-wrap" checked><span class="dot" aria-hidden="true"></span>Wrap edges</label>
+          <label class="chip sq"><input type="checkbox" id="sb-gridlines" checked><span class="dot" aria-hidden="true"></span>Grid lines</label>
+          <label class="chip sq"><input type="checkbox" id="sb-age"><span class="dot" aria-hidden="true"></span>Color by age</label>
+          <label class="chip sq"><input type="checkbox" id="sb-trails" checked><span class="dot" aria-hidden="true"></span>Trails</label>
+        </div>
+        <p class="sb-rule-note"><span id="sb-rule-msg" class="sb-msg" aria-live="polite"></span></p>
+        <div class="sb-sep" aria-hidden="true"></div>
+        <div class="sb-row">
+          <button class="btn" id="sb-export" type="button">Export RLE</button>
+          <button class="btn" id="sb-import" type="button" aria-expanded="false" aria-controls="sb-io">Import RLE</button>
+          <button class="btn" id="sb-share" type="button">Share link</button>
+        </div>
+      </div>
+      <p class="sb-msg" id="sb-msg" role="status" aria-live="polite"></p>
+
+      <div class="sb-io" id="sb-io" hidden>
+        <label class="lbl" for="sb-io-text">RLE text — paste a pattern here to import, or copy the exported board</label>
+        <textarea id="sb-io-text" spellcheck="false" placeholder="x = 3, y = 3, rule = B3/S23&#10;bob$2bo$3o!"></textarea>
+        <div class="sb-row">
+          <button class="btn primary" id="sb-io-apply" type="button">Load into sandbox</button>
+          <button class="btn" id="sb-io-copy" type="button">Copy</button>
+          <button class="btn" id="sb-io-close" type="button">Close</button>
+        </div>
+      </div>
+
+      <details class="keys">
+        <summary>Keyboard shortcuts</summary>
+        <dl>
+          <dt><kbd>Space</kbd></dt><dd>Play / pause (hold + drag to pan)</dd>
+          <dt><kbd>N</kbd> / <kbd>B</kbd></dt><dd>Step forward / back</dd>
+          <dt><kbd>C</kbd></dt><dd>Clear the board</dd>
+          <dt><kbd>R</kbd> / <kbd>F</kbd></dt><dd>Rotate / flip the selected stamp</dd>
+          <dt><kbd>+</kbd> / <kbd>−</kbd></dt><dd>Zoom in / out</dd>
+          <dt><kbd>←↑↓→</kbd> <kbd>Enter</kbd></dt><dd>Move the cursor on the board, then draw or stamp</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Cancel the stamp</dd>
+        </dl>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- 2.9 Going further -->
+<section class="section reveal" id="further" aria-labelledby="h-fur">
+  <div class="wrap">
+    <div class="prose intro">
+      <p class="kicker">08 · Going further</p>
+      <h2 id="h-fur">Down the rabbit hole</h2>
+    </div>
+    <div class="cards">
+      <article class="card">
+        <h3>John Conway &amp; the 1970 column</h3>
+        <p>The British mathematician John Horton Conway (1937–2020) invented the game in 1970. It reached the world that October in Martin Gardner's "Mathematical Games" column in <em>Scientific American</em>, and promptly consumed a generation of computer time.</p>
+      </article>
+      <article class="card">
+        <h3>Life can compute</h3>
+        <p>The game is <strong>Turing complete</strong>: gliders can carry signals, guns can clock them, and collisions act as logic gates. Builders have assembled working computers — even a Turing machine, by Paul Rendell in 2000 — entirely out of Life patterns.</p>
+      </article>
+      <article class="card">
+        <h3>Variants &amp; rule space</h3>
+        <p>Conway's rule is written <span class="mono">B3/S23</span>: <em>born</em> with 3 neighbors, <em>survive</em> with 2 or 3. Change the numbers and you get a different universe. Try one in the sandbox:</p>
+        <div class="rule-links" id="ruleLinks">
+          <button class="btn" type="button" data-rule="B36/S23">HighLife</button>
+          <button class="btn" type="button" data-rule="B2/S">Seeds</button>
+          <button class="btn" type="button" data-rule="B3678/S34678">Day &amp; Night</button>
+        </div>
+      </article>
+      <article class="card">
+        <h3>Further reading</h3>
+        <ul>
+          <li><a href="https://conwaylife.com" target="_blank" rel="noopener noreferrer">LifeWiki (conwaylife.com)</a> — an encyclopedia of every known pattern.</li>
+          <li><a href="https://golly.sourceforge.io" target="_blank" rel="noopener noreferrer">Golly</a> — a fast, free simulator for huge patterns and many rules.</li>
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Built with vanilla JavaScript and Canvas — one file, no dependencies. Dedicated to John Conway.</div>
+</footer>
+<script>
+'use strict';
+(() => {
+/* ==========================================================================
+   Utilities
+   ========================================================================== */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const RMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
+const reduced = () => RMQ.matches;
+const storage = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage unavailable */ } },
+};
+
+/* ---- theme colours, read from CSS custom properties ---- */
+const T = {};
+function readTheme() {
+  const cs = getComputedStyle(document.documentElement);
+  const g = (n) => cs.getPropertyValue(n).trim();
+  T.live = g('--live'); T.glow = g('--glow'); T.birth = g('--birth'); T.death = g('--death');
+  T.grid = g('--grid'); T.boardBg = g('--board-bg'); T.border = g('--border'); T.tint = g('--tint');
+  T.text = g('--text'); T.accent = g('--accent');
+  T.age = [1, 2, 3, 4, 5].map((i) => g('--age' + i));
+}
+
+/* ==========================================================================
+   Rules, RLE, pattern helpers
+   ========================================================================== */
+function parseRule(str) {
+  if (typeof str !== 'string') return null;
+  const s = str.trim().toUpperCase().replace(/\s+/g, '');
+  let b, sv;
+  let m = /^B([0-8]*)\/S([0-8]*)$/.exec(s);
+  if (m) { b = m[1]; sv = m[2]; } else {
+    m = /^S?([0-8]*)\/B?([0-8]+)$/.exec(s); // legacy "23/3"
+    if (!m) return null;
+    sv = m[1]; b = m[2];
+  }
+  const birth = new Uint8Array(9), survive = new Uint8Array(9);
+  for (const ch of b) birth[+ch] = 1;
+  for (const ch of sv) survive[+ch] = 1;
+  const digits = (arr) => [...arr].map((v, i) => (v ? i : '')).join('');
+  return { birth, survive, str: 'B' + digits(birth) + '/S' + digits(survive) };
+}
+
+function normCells(cells) {
+  if (!cells.length) return { cells: [], w: 0, h: 0 };
+  let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+  for (const [x, y] of cells) { if (x < minx) minx = x; if (y < miny) miny = y; if (x > maxx) maxx = x; if (y > maxy) maxy = y; }
+  return { cells: cells.map(([x, y]) => [x - minx, y - miny]), w: maxx - minx + 1, h: maxy - miny + 1 };
+}
+
+function transformCells(cells, rot = 0, flip = false) {
+  let { cells: c, w, h } = normCells(cells);
+  if (flip) c = c.map(([x, y]) => [w - 1 - x, y]);
+  for (let r = 0; r < (rot & 3); r++) {
+    c = c.map(([x, y]) => [h - 1 - y, x]);
+    [w, h] = [h, w];
+  }
+  return { cells: c, w, h };
+}
+
+function parseRLE(text) {
+  const res = { cells: [], w: 0, h: 0, rule: null, pos: null };
+  let x = 0, y = 0, run = '', done = false;
+  for (const raw of String(text).split(/\r?\n/)) {
+    if (done) break;
+    const line = raw.trim();
+    if (!line) continue;
+    if (line[0] === '#') {
+      const m = /^#CXRLE.*?Pos=(-?\d+),(-?\d+)/i.exec(line);
+      if (m) res.pos = [+m[1], +m[2]];
+      continue;
+    }
+    if (/^x\s*=/i.test(line)) {
+      const m = /rule\s*=\s*([^\s,]+)/i.exec(line);
+      if (m) res.rule = m[1];
+      continue;
+    }
+    for (const ch of line) {
+      if (ch >= '0' && ch <= '9') { run += ch; continue; }
+      if (ch === ' ' || ch === '\t') continue;
+      const n = run ? Math.min(parseInt(run, 10), 5000) : 1;
+      run = '';
+      if (ch === 'b' || ch === 'B' || ch === '.') x += n;
+      else if (ch === 'o' || ch === 'O' || ch === '*') {
+        if (res.cells.length + n > 400000) return res;
+        for (let i = 0; i < n; i++) res.cells.push([x + i, y]);
+        x += n;
+      } else if (ch === '$') { y += n; x = 0; }
+      else if (ch === '!') { done = true; break; }
+    }
+  }
+  const nc = normCells(res.cells);
+  res.cells = nc.cells; res.w = nc.w; res.h = nc.h;
+  return res;
+}
+
+function serializeRLE(cells, rule, pos) {
+  if (!cells.length) return 'x = 0, y = 0, rule = ' + rule + '\n!';
+  const { cells: nc, w, h } = normCells(cells);
+  const rows = new Array(h);
+  for (const [x, y] of nc) (rows[y] || (rows[y] = [])).push(x);
+  const toks = [];
+  const push = (n, c) => { const l = toks[toks.length - 1]; if (l && l[1] === c) l[0] += n; else toks.push([n, c]); };
+  for (let y = 0; y < h; y++) {
+    const xs = rows[y];
+    let cx = 0;
+    if (xs) {
+      xs.sort((a, b) => a - b);
+      let i = 0;
+      while (i < xs.length) {
+        let j = i;
+        while (j + 1 < xs.length && xs[j + 1] === xs[j] + 1) j++;
+        const gap = xs[i] - cx;
+        if (gap > 0) push(gap, 'b');
+        push(j - i + 1, 'o');
+        cx = xs[j] + 1; i = j + 1;
+      }
+    }
+    if (y < h - 1) push(1, '$');
+  }
+  const strs = toks.map(([n, c]) => (n > 1 ? n : '') + c);
+  strs.push('!');
+  let body = '', line = '';
+  for (const t of strs) { if (line.length + t.length > 70) { body += line + '\n'; line = ''; } line += t; }
+  body += line;
+  let head = '';
+  if (pos) head += '#CXRLE Pos=' + pos[0] + ',' + pos[1] + '\n';
+  return head + 'x = ' + w + ', y = ' + h + ', rule = ' + rule + '\n' + body;
+}
+
+const ascii = (rows) => { const c = []; rows.forEach((r, y) => [...r].forEach((ch, x) => { if (ch === '#') c.push([x, y]); })); return c; };
+
+/* ---- canvas helpers ---- */
+function rr(p, x, y, s, r) {
+  if (r > 0) {
+    if (p.roundRect) { p.roundRect(x, y, s, s, r); return; }
+    p.moveTo(x + r, y); p.arcTo(x + s, y, x + s, y + s, r); p.arcTo(x + s, y + s, x, y + s, r);
+    p.arcTo(x, y + s, x, y, r); p.arcTo(x, y, x + s, y, r); p.closePath();
+  } else p.rect(x, y, s, s);
+}
+const ageBucket = (a) => (a <= 1 ? 0 : a <= 3 ? 1 : a <= 8 ? 2 : a <= 20 ? 3 : 4);
+
+function drawSpark(cv, data) {
+  if (!cv) return;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const c = cv.getContext('2d');
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, w, h);
+  const n = data.length;
+  if (n < 2) return;
+  let max = 1;
+  for (let i = 0; i < n; i++) if (data[i] > max) max = data[i];
+  const X = (i) => (i / (n - 1)) * (w - 4) + 2, Y = (v) => h - 3 - (v / max) * (h - 7);
+  c.beginPath();
+  c.moveTo(X(0), h);
+  for (let i = 0; i < n; i++) c.lineTo(X(i), Y(data[i]));
+  c.lineTo(X(n - 1), h); c.closePath();
+  c.globalAlpha = 0.16; c.fillStyle = T.live; c.fill(); c.globalAlpha = 1;
+  c.beginPath();
+  for (let i = 0; i < n; i++) (i ? c.lineTo(X(i), Y(data[i])) : c.moveTo(X(i), Y(data[i])));
+  c.strokeStyle = T.live; c.lineWidth = 1.6; c.lineJoin = 'round'; c.stroke();
+}
+
+/* ==========================================================================
+   Scheduler (one rAF loop, runs only while some board needs it)
+   ========================================================================== */
+const Sched = {
+  boards: new Set(), raf: 0,
+  wake() { if (!this.raf) this.raf = requestAnimationFrame((t) => this.tick(t)); },
+  tick(t) {
+    this.raf = 0;
+    let again = false;
+    for (const b of this.boards) if (b.frame(t)) again = true;
+    if (again) this.wake();
+  },
+};
+const BOARD_OF = new WeakMap();
+const VIS = 'IntersectionObserver' in window
+  ? new IntersectionObserver((es) => { for (const e of es) { const b = BOARD_OF.get(e.target); if (b) b.setVisible(e.isIntersecting); } })
+  : null;
+
+/* ==========================================================================
+   LifeBoard — the reusable engine + renderer + input handler
+   ========================================================================== */
+class LifeBoard {
+  constructor(canvas, opts = {}) {
+    const o = this.o = Object.assign({
+      cols: 20, rows: 20, wrap: true, cellSize: 12, maxCell: 48, mode: 'fit', margin: 0, sink: 0,
+      rule: 'B3/S23', speed: 10, interactive: false, showGrid: true, colorByAge: false, trails: false,
+      showChanges: false, pattern: null, patternPos: null, cells: null, autoplay: false, loop: 0,
+      history: 200, alpha: 1, transparent: false, glow: true, tool: 'toggle', minCell: 1.5, maxZoom: 48,
+      fillDensity: 0.2, onTick: null, onState: null, onHover: null, onEdit: null, overlay: null,
+    }, opts);
+    this.canvas = canvas; this.ctx = canvas.getContext('2d');
+    this.wrap = !!o.wrap; this.speed = o.speed; this.tool = o.tool;
+    this.cs = o.cellSize; this.ox = 0; this.oy = 0; this.cssW = 0; this.cssH = 0; this.dpr = 1;
+    this.playing = false; this.visible = !VIS; this.dirty = true; this.statsDirty = false;
+    this.acc = 0; this.lastFrame = 0; this.destroyed = false; this.stepsRun = 0;
+    this.gen = 0; this.pop = 0; this.past = []; this.future = [];
+    this.trailActive = false; this.chgT = 0;
+    this.hoverCell = null; this.kcur = null; this.stamp = null; this.ghost = null;
+    this.ptrs = new Map(); this.stroke = null; this.gesture = null; this.spaceHeld = false; this.spaceUsed = false;
+    this._alloc(o.cols, o.rows);
+    this.setRule(o.rule);
+    if (o.cells) this.setCells(o.cells);
+    else if (o.pattern) {
+      const src = typeof o.pattern === 'string' ? parseRLE(o.pattern).cells : o.pattern;
+      const p = o.patternPos;
+      this.loadPattern(src, p ? p[0] : null, p ? p[1] : null);
+    }
+    this.captureSeed();
+    BOARD_OF.set(canvas, this);
+    Sched.boards.add(this);
+    if (o.interactive) this._bind();
+    if (VIS) VIS.observe(canvas);
+    const parent = canvas.parentElement;
+    if (parent && 'ResizeObserver' in window) { this.ro = new ResizeObserver(() => this.resize()); this.ro.observe(parent); }
+    this.resize();
+    if (o.autoplay && !reduced()) this.play();
+  }
+
+  /* ---------- storage ---------- */
+  _alloc(cols, rows) {
+    const n = cols * rows;
+    this.cols = cols; this.rows = rows;
+    this.cur = new Uint8Array(n); this.nxt = new Uint8Array(n);
+    this.age = new Uint16Array(n); this.nage = new Uint16Array(n);
+    this.trail = new Float32Array(n); this.chg = new Uint8Array(n);
+    this.past = []; this.future = [];
+  }
+  _regrow(nc, nr) {
+    const old = { c: this.cur, a: this.age, cols: this.cols, rows: this.rows };
+    this._alloc(nc, nr);
+    const d = this.o.fillDensity;
+    for (let y = 0; y < nr; y++) for (let x = 0; x < nc; x++) {
+      const i = y * nc + x;
+      if (x < old.cols && y < old.rows) { this.cur[i] = old.c[y * old.cols + x]; this.age[i] = old.a[y * old.cols + x]; }
+      else if (Math.random() < d) { this.cur[i] = 1; this.age[i] = 1; }
+    }
+    this.pop = this._count(); this.seed = null; this.dirty = true;
+  }
+  _count() { let n = 0; const c = this.cur; for (let i = 0; i < c.length; i++) n += c[i]; return n; }
+
+  captureSeed() { this.seed = this.cur.slice(); }
+  _dirty() { this.dirty = true; Sched.wake(); }
+  _emit() {
+    this.statsDirty = false;
+    if (this.o.onTick) this.o.onTick({ generation: this.gen, population: this.pop, board: this });
+  }
+
+  /* ---------- rules ---------- */
+  setRule(str) {
+    const r = parseRule(str);
+    if (!r) return false;
+    this.rule = r; this.ruleStr = r.str; this.future = [];
+    return true;
+  }
+  setWrap(v) { this.wrap = !!v; this.future = []; this._dirty(); }
+  setOption(k, v) {
+    this.o[k] = v;
+    if (k === 'trails' && !v) { this.trail.fill(0); this.trailActive = false; }
+    this._dirty();
+  }
+  setSpeed(v) { this.speed = clamp(v, 0.25, 240); }
+  setTool(t) {
+    this.tool = t;
+    if (this.o.mode === 'camera') this.canvas.style.cursor = t === 'pan' ? 'grab' : 'crosshair';
+  }
+
+  /* ---------- cell access ---------- */
+  getCell(x, y) { return x >= 0 && y >= 0 && x < this.cols && y < this.rows ? this.cur[y * this.cols + x] : 0; }
+  setCell(x, y, v) {
+    if (x < 0 || y < 0 || x >= this.cols || y >= this.rows) return false;
+    const i = y * this.cols + x;
+    v = v ? 1 : 0;
+    if (this.cur[i] === v) return false;
+    this.cur[i] = v; this.age[i] = v; this.trail[i] = 0;
+    this.pop += v ? 1 : -1;
+    this.future.length = 0; this.statsDirty = true;
+    this._dirty();
+    return true;
+  }
+  neighbors(x, y) {
+    let n = 0; const { cols, rows, cur, wrap } = this;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      let xx = x + dx, yy = y + dy;
+      if (wrap) { xx = (xx + cols) % cols; yy = (yy + rows) % rows; }
+      else if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
+      n += cur[yy * cols + xx];
+    }
+    return n;
+  }
+  setCells(cells, dx = 0, dy = 0) { for (const [x, y] of cells) this.setCell(x + dx, y + dy, 1); }
+  loadPattern(src, x, y, t = {}) {
+    const raw = typeof src === 'string' ? parseRLE(src).cells : src;
+    const tc = transformCells(raw, t.rot || 0, !!t.flip);
+    if (x == null) x = Math.floor((this.cols - tc.w) / 2);
+    if (y == null) y = Math.floor((this.rows - tc.h) / 2);
+    this.setCells(tc.cells, x, y);
+    return { x, y, w: tc.w, h: tc.h };
+  }
+  liveCells() {
+    const out = [], { cols, rows, cur } = this;
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (cur[y * cols + x]) out.push([x, y]);
+    return out;
+  }
+  toRLE() {
+    const cells = this.liveCells();
+    let pos = null;
+    if (cells.length) { pos = [Math.min(...cells.map((c) => c[0])), Math.min(...cells.map((c) => c[1]))]; }
+    return serializeRLE(cells, this.ruleStr, pos);
+  }
+  clear() {
+    this.cur.fill(0); this.age.fill(0); this.trail.fill(0); this.chg.fill(0);
+    this.pop = 0; this.gen = 0; this.past = []; this.future = []; this.trailActive = false;
+    this.captureSeed(); this._dirty(); this._emit();
+  }
+  randomize(density = 0.25) {
+    const c = this.cur, a = this.age;
+    for (let i = 0; i < c.length; i++) { const v = Math.random() < density ? 1 : 0; c[i] = v; a[i] = v; }
+    if (this.o.sink) this._applySink(this.cur, this.age);
+    this.trail.fill(0); this.chg.fill(0); this.trailActive = false;
+    this.pop = this._count(); this.gen = 0; this.past = []; this.future = [];
+    this.captureSeed(); this._dirty(); this._emit();
+  }
+  reset() {
+    if (this.seed) this.cur.set(this.seed); else this.cur.fill(0);
+    const c = this.cur, a = this.age;
+    for (let i = 0; i < c.length; i++) a[i] = c[i];
+    this.trail.fill(0); this.chg.fill(0); this.trailActive = false;
+    this.pop = this._count(); this.gen = 0; this.past = []; this.future = [];
+    this._dirty(); this._emit();
+  }
+
+  /* ---------- time ---------- */
+  _push() {
+    const max = this.o.history;
+    if (max <= 0) return;
+    let s;
+    if (this.past.length >= max) s = this.past.shift();
+    else s = { c: new Uint8Array(this.cur.length), a: new Uint16Array(this.cur.length), g: 0, p: 0 };
+    s.c.set(this.cur); s.a.set(this.age); s.g = this.gen; s.p = this.pop;
+    this.past.push(s);
+  }
+  _snap() { return { c: this.cur.slice(), a: this.age.slice(), g: this.gen, p: this.pop }; }
+  _load(s) {
+    if (this.o.showChanges) {
+      const c = this.cur, n = s.c, ch = this.chg;
+      for (let i = 0; i < c.length; i++) ch[i] = n[i] && !c[i] ? 1 : (!n[i] && c[i] ? 2 : 0);
+      this.chgT = performance.now();
+    }
+    this.cur.set(s.c); this.age.set(s.a); this.gen = s.g; this.pop = s.p;
+    this.trail.fill(0); this.trailActive = false;
+  }
+  _advance() {
+    this.stepsRun++;
+    if (this.future.length) { this._push(); this._load(this.future.pop()); return; }
+    this._push();
+    this._compute();
+    const L = this.o.loop;
+    if (L && this.gen >= L) { const p = this.playing; this.reset(); this.playing = p; }
+  }
+  _back() {
+    if (!this.past.length) return false;
+    this.future.push(this._snap());
+    this._load(this.past.pop());
+    return true;
+  }
+  step() { this._advance(); this.dirty = true; Sched.wake(); this._emit(); }
+  stepBack() { const ok = this._back(); this.dirty = true; Sched.wake(); this._emit(); return ok; }
+  /** history position 0..(past+future); moves through stored states */
+  scrubTo(k) {
+    k = clamp(Math.round(k), 0, this.past.length + this.future.length);
+    while (this.past.length > k) this._back();
+    while (this.past.length < k && this.future.length) { this._push(); this._load(this.future.pop()); }
+    this.dirty = true; Sched.wake(); this._emit();
+  }
+  histLen() { return this.past.length + this.future.length; }
+  series() { const s = this.past.map((x) => x.p); s.push(this.pop); return s; }
+
+  _compute() {
+    const { cols, rows, cur, nxt, age, nage, trail, chg, wrap } = this;
+    const birth = this.rule.birth, survive = this.rule.survive;
+    const trailsOn = this._trailsOn(), chgOn = this.o.showChanges;
+    let pop = 0, died = false;
+    for (let y = 0; y < rows; y++) {
+      const up = y > 0 ? y - 1 : (wrap ? rows - 1 : -1);
+      const dn = y < rows - 1 ? y + 1 : (wrap ? 0 : -1);
+      const r0 = up < 0 ? -1 : up * cols, r1 = y * cols, r2 = dn < 0 ? -1 : dn * cols;
+      for (let x = 0; x < cols; x++) {
+        const l = x > 0 ? x - 1 : (wrap ? cols - 1 : -1);
+        const r = x < cols - 1 ? x + 1 : (wrap ? 0 : -1);
+        let n = 0;
+        if (r0 >= 0) { if (l >= 0) n += cur[r0 + l]; n += cur[r0 + x]; if (r >= 0) n += cur[r0 + r]; }
+        if (l >= 0) n += cur[r1 + l];
+        if (r >= 0) n += cur[r1 + r];
+        if (r2 >= 0) { if (l >= 0) n += cur[r2 + l]; n += cur[r2 + x]; if (r >= 0) n += cur[r2 + r]; }
+        const i = r1 + x, a = cur[i];
+        const v = a ? survive[n] : birth[n];
+        nxt[i] = v;
+        if (v) { pop++; nage[i] = a ? (age[i] < 65535 ? age[i] + 1 : 65535) : 1; }
+        else { nage[i] = 0; if (a && trailsOn) { trail[i] = 1; died = true; } }
+        if (chgOn) chg[i] = v && !a ? 1 : (!v && a ? 2 : 0);
+      }
+    }
+    if (this.o.sink) { this._applySink(nxt, nage); pop = 0; for (let i = 0; i < nxt.length; i++) pop += nxt[i]; }
+    this.cur = nxt; this.nxt = cur; this.age = nage; this.nage = age;
+    this.pop = pop; this.gen++;
+    if (died) this.trailActive = true;
+    if (chgOn) this.chgT = performance.now();
+  }
+  /** kill cells in the outer `sink` rings (used with `margin` so gliders vanish off-screen) */
+  _applySink(cells, ages) {
+    const { cols, rows } = this, k = this.o.sink;
+    for (let y = 0; y < rows; y++) {
+      const edgeY = y < k || y >= rows - k;
+      for (let x = 0; x < cols; x++) {
+        if (edgeY || x < k || x >= cols - k) { const i = y * cols + x; cells[i] = 0; ages[i] = 0; }
+      }
+    }
+  }
+  _trailsOn() { return this.o.trails && !reduced(); }
+
+  play() { if (this.playing) return; this.playing = true; this.acc = 0; this.lastFrame = 0; this._state(); Sched.wake(); }
+  pause() { if (!this.playing) return; this.playing = false; this._state(); }
+  toggle() { this.playing ? this.pause() : this.play(); }
+  _state() { if (this.o.onState) this.o.onState(this.playing, this); }
+
+  setVisible(v) { this.visible = v; if (v) this._dirty(); else this.lastFrame = 0; }
+
+  /** called by the scheduler; returns true while the board still needs frames */
+  frame(now) {
+    if (this.destroyed || !this.visible) { this.lastFrame = 0; return false; }
+    const fdt = this.lastFrame ? Math.min(0.1, (now - this.lastFrame) / 1000) : 1 / 60;
+    this.lastFrame = now;
+    let ticked = false;
+    if (this.playing) {
+      this.acc += fdt;
+      const iv = 1 / this.speed;
+      let n = 0;
+      while (this.acc >= iv && n < 8) { this._advance(); this.acc -= iv; n++; }
+      if (n === 8) this.acc = 0;
+      if (n) { ticked = true; this.dirty = true; }
+    }
+    let anim = false;
+    if (this.trailActive) {
+      if (!this._trailsOn()) { this.trail.fill(0); this.trailActive = false; this.dirty = true; }
+      else {
+        const tr = this.trail, d = fdt * 1.8;
+        let live = false;
+        for (let i = 0; i < tr.length; i++) { const t = tr[i]; if (t > 0) { if (t > d) { tr[i] = t - d; live = true; } else tr[i] = 0; } }
+        this.trailActive = live; anim = live; this.dirty = true;
+      }
+    }
+    if (this.o.showChanges && this.chgT && now - this.chgT < 330) { anim = true; this.dirty = true; }
+    if (this.dirty) { this.dirty = false; this.draw(now); }
+    if (ticked || this.statsDirty) this._emit();
+    const need = this.playing || anim;
+    if (!need) this.lastFrame = 0;
+    return need;
+  }
+
+  /* ---------- geometry ---------- */
+  cellRect(x, y) { return { x: this.ox + x * this.cs, y: this.oy + y * this.cs, s: this.cs }; }
+  _vis() { const m = this.o.margin; return [m, m, this.cols - m, this.rows - m]; }
+  _cellAt(px, py, clip = true) {
+    const x = Math.floor((px - this.ox) / this.cs), y = Math.floor((py - this.oy) / this.cs);
+    if (clip) { const [a, b, c, d] = this._vis(); if (x < a || y < b || x >= c || y >= d) return null; }
+    return { x, y };
+  }
+  fitView(minCs = 0) {
+    const W = this.cssW, H = this.cssH;
+    if (!W || !H) return;
+    let cs = Math.min(W / this.cols, H / this.rows);
+    cs = clamp(Math.max(cs, minCs), this.o.minCell, this.o.maxZoom);
+    this.cs = cs; this.ox = (W - this.cols * cs) / 2; this.oy = (H - this.rows * cs) / 2;
+    this._dirty();
+  }
+  _clampPan() {
+    const gw = this.cols * this.cs, gh = this.rows * this.cs, m = 60;
+    this.ox = clamp(this.ox, m - gw, this.cssW - m);
+    this.oy = clamp(this.oy, m - gh, this.cssH - m);
+  }
+  zoomAt(px, py, f) {
+    const ncs = clamp(this.cs * f, this.o.minCell, this.o.maxZoom), r = ncs / this.cs;
+    this.ox = px - (px - this.ox) * r; this.oy = py - (py - this.oy) * r; this.cs = ncs;
+    this._clampPan(); this._dirty();
+  }
+  centerCell() { const c = this._cellAt(this.cssW / 2, this.cssH / 2, false); return { x: clamp(c.x, 0, this.cols - 1), y: clamp(c.y, 0, this.rows - 1) }; }
+
+  resize() {
+    const p = this.canvas.parentElement;
+    if (!p) return;
+    const dpr = this.dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const m = this.o.mode, w = p.clientWidth, h = p.clientHeight, mg = this.o.margin;
+    if (m === 'fit') {
+      const vc = this.cols - 2 * mg, vr = this.rows - 2 * mg;
+      let cs = Math.min(this.o.maxCell, w / vc);
+      if (!(cs >= 1)) cs = this.o.cellSize;
+      cs = Math.max(2, Math.floor(cs * dpr) / dpr);
+      this.cs = cs; this.cssW = cs * vc; this.cssH = cs * vr; this.ox = -mg * cs; this.oy = -mg * cs;
+      this.canvas.style.width = this.cssW + 'px'; this.canvas.style.height = this.cssH + 'px';
+    } else if (m === 'fill') {
+      if (!w || !h) return;
+      this.cs = this.o.cellSize; this.cssW = w; this.cssH = h; this.ox = this.oy = 0;
+      const nc = Math.max(4, Math.ceil(w / this.cs)), nr = Math.max(4, Math.ceil(h / this.cs));
+      if (nc !== this.cols || nr !== this.rows) this._regrow(nc, nr);
+    } else {
+      if (!w || !h) return;
+      const first = !this.cssW;
+      this.cssW = w; this.cssH = h;
+      if (first) this.fitView(5); else this._clampPan();
+    }
+    const W = Math.max(1, Math.round(this.cssW * dpr)), H = Math.max(1, Math.round(this.cssH * dpr));
+    if (this.canvas.width !== W || this.canvas.height !== H) { this.canvas.width = W; this.canvas.height = H; }
+    this._dirty();
+  }
+
+  destroy() {
+    this.destroyed = true; this.playing = false;
+    Sched.boards.delete(this);
+    if (VIS) VIS.unobserve(this.canvas);
+    if (this.ro) this.ro.disconnect();
+    BOARD_OF.delete(this.canvas);
+  }
+
+  /* ---------- rendering ---------- */
+  draw(now) {
+    const ctx = this.ctx, o = this.o, { cols, rows, cs, ox, oy, cssW: W, cssH: H, cur, age } = this;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    ctx.clearRect(0, 0, W, H);
+    ctx.globalAlpha = o.alpha;
+    if (!o.transparent) { ctx.fillStyle = T.boardBg; ctx.fillRect(ox, oy, cols * cs, rows * cs); }
+    const x0 = Math.max(0, Math.floor(-ox / cs)), y0 = Math.max(0, Math.floor(-oy / cs));
+    const x1 = Math.min(cols, Math.ceil((W - ox) / cs)), y1 = Math.min(rows, Math.ceil((H - oy) / cs));
+    if (x1 > x0 && y1 > y0) {
+      if (o.showGrid && cs >= 6) {
+        ctx.beginPath();
+        for (let x = x0; x <= x1; x++) { const px = Math.round(ox + x * cs) + 0.5; ctx.moveTo(px, oy + y0 * cs); ctx.lineTo(px, oy + y1 * cs); }
+        for (let y = y0; y <= y1; y++) { const py = Math.round(oy + y * cs) + 0.5; ctx.moveTo(ox + x0 * cs, py); ctx.lineTo(ox + x1 * cs, py); }
+        ctx.strokeStyle = T.grid; ctx.lineWidth = 1; ctx.stroke();
+      }
+      const pad = cs >= 6 ? Math.max(0.5, cs * 0.07) : 0, sz = cs - pad * 2, rad = sz >= 6 ? sz * 0.2 : 0;
+      // afterglow trails
+      if (this.trailActive && this._trailsOn()) {
+        const lv = [new Path2D(), new Path2D(), new Path2D(), new Path2D()], tr = this.trail;
+        for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+          const i = y * cols + x;
+          if (!cur[i]) { const t = tr[i]; if (t > 0) rr(lv[Math.min(3, Math.floor(t * 4))], ox + x * cs + pad, oy + y * cs + pad, sz, rad); }
+        }
+        ctx.fillStyle = T.live;
+        for (let b = 0; b < 4; b++) { ctx.globalAlpha = o.alpha * (0.07 + b * 0.085); ctx.fill(lv[b]); }
+        ctx.globalAlpha = o.alpha;
+      }
+      // live cells
+      let live = 0;
+      if (o.colorByAge) {
+        const ps = [new Path2D(), new Path2D(), new Path2D(), new Path2D(), new Path2D()];
+        for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+          const i = y * cols + x;
+          if (cur[i]) { live++; rr(ps[ageBucket(age[i])], ox + x * cs + pad, oy + y * cs + pad, sz, rad); }
+        }
+        for (let b = 0; b < 5; b++) { ctx.fillStyle = T.age[b]; ctx.fill(ps[b]); }
+      } else {
+        const p = new Path2D();
+        for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+          if (cur[y * cols + x]) { live++; rr(p, ox + x * cs + pad, oy + y * cs + pad, sz, rad); }
+        }
+        ctx.fillStyle = T.live;
+        if (o.glow && cs >= 8 && live <= 1500) { ctx.shadowColor = T.glow; ctx.shadowBlur = Math.min(14, cs * 0.9); }
+        ctx.fill(p);
+        ctx.shadowBlur = 0;
+      }
+      // births / deaths flash
+      if (o.showChanges && this.chgT) {
+        const a = clamp(1 - (now - this.chgT) / 300, 0, 1);
+        if (a > 0) {
+          const chg = this.chg;
+          for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+            const k = chg[y * cols + x];
+            if (!k) continue;
+            const px = ox + x * cs, py = oy + y * cs;
+            if (k === 1) {
+              ctx.globalAlpha = a * o.alpha; ctx.fillStyle = T.birth;
+              const q = new Path2D(); rr(q, px + pad, py + pad, sz, rad); ctx.fill(q);
+              ctx.strokeStyle = T.birth; ctx.lineWidth = Math.max(1.5, cs * 0.08);
+              const ring = new Path2D(); const g = Math.max(1.5, cs * 0.12); rr(ring, px - g + pad, py - g + pad, sz + 2 * g, rad + g); ctx.stroke(ring);
+            } else {
+              ctx.globalAlpha = a * o.alpha; ctx.strokeStyle = T.death; ctx.lineWidth = Math.max(1.5, cs * 0.09);
+              const q = new Path2D(); rr(q, px + pad + 1, py + pad + 1, sz - 2, rad); ctx.stroke(q);
+              ctx.beginPath(); ctx.moveTo(px + pad + 2, py + pad + sz - 2); ctx.lineTo(px + pad + sz - 2, py + pad + 2); ctx.stroke();
+            }
+          }
+          ctx.globalAlpha = o.alpha;
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+    if (o.overlay) { ctx.save(); o.overlay(ctx, this); ctx.restore(); }
+    // stamp ghost
+    if (this.stamp && this.ghost) {
+      const g = this.ghost, pad = cs >= 6 ? Math.max(0.5, cs * 0.07) : 0, sz = cs - pad * 2;
+      ctx.globalAlpha = 0.55; ctx.fillStyle = T.live;
+      const p = new Path2D();
+      for (const [dx, dy] of this.stamp.cells) rr(p, ox + (g.x + dx) * cs + pad, oy + (g.y + dy) * cs + pad, sz, sz >= 6 ? sz * 0.2 : 0);
+      ctx.fill(p);
+      ctx.globalAlpha = 0.9; ctx.strokeStyle = T.accent; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+      ctx.strokeRect(ox + g.x * cs, oy + g.y * cs, this.stamp.w * cs, this.stamp.h * cs);
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+    }
+    // keyboard cursor
+    if (this.kcur) {
+      const r = this.cellRect(this.kcur.x, this.kcur.y);
+      ctx.strokeStyle = T.text; ctx.lineWidth = 2; ctx.strokeRect(r.x + 1, r.y + 1, r.s - 2, r.s - 2);
+      ctx.strokeStyle = T.accent; ctx.lineWidth = 1; ctx.strokeRect(r.x + 3, r.y + 3, Math.max(1, r.s - 6), Math.max(1, r.s - 6));
+    }
+    if (o.mode === 'camera') { ctx.strokeStyle = T.border; ctx.lineWidth = 1; ctx.strokeRect(ox + 0.5, oy + 0.5, cols * cs - 1, rows * cs - 1); }
+  }
+
+  /* ---------- input ---------- */
+  _bind() {
+    const c = this.canvas, cam = this.o.mode === 'camera';
+    c.style.touchAction = cam ? 'none' : 'pan-y';
+    if (cam) c.style.cursor = this.tool === 'pan' ? 'grab' : 'crosshair';
+    c.tabIndex = 0;
+    c.addEventListener('pointerdown', (e) => this._down(e));
+    c.addEventListener('pointermove', (e) => this._move(e));
+    c.addEventListener('pointerup', (e) => this._up(e, false));
+    c.addEventListener('pointercancel', (e) => this._up(e, true));
+    c.addEventListener('pointerleave', (e) => {
+      if (e.pointerType === 'mouse' && !this.stroke) { this._setHover(null); if (this.ghost) { this.ghost = null; this._dirty(); } }
+    });
+    if (cam) {
+      c.addEventListener('wheel', (e) => this._wheel(e), { passive: false });
+      c.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
+    c.addEventListener('keydown', (e) => this._key(e));
+    c.addEventListener('focus', () => {
+      let kb = false;
+      try { kb = c.matches(':focus-visible'); } catch (err) { /* unsupported */ }
+      if (kb && !this.kcur) { this.kcur = this.hoverCell ? { ...this.hoverCell } : this._defaultCursor(); this._setHover(this.kcur); this._dirty(); }
+    });
+    c.addEventListener('blur', () => { if (this.kcur) { this.kcur = null; this._dirty(); } });
+  }
+  _defaultCursor() { return this.o.mode === 'camera' ? this.centerCell() : { x: this.cols >> 1, y: this.rows >> 1 }; }
+  _pt(e) { const r = this.canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  _setHover(cell) {
+    const a = this.hoverCell;
+    if ((!a && !cell) || (a && cell && a.x === cell.x && a.y === cell.y)) return;
+    this.hoverCell = cell ? { x: cell.x, y: cell.y } : null;
+    if (this.o.onHover) this.o.onHover(this.hoverCell, this);
+    this._dirty();
+  }
+  _ghostTo(p) {
+    if (!this.stamp) return;
+    const c = this._cellAt(p.x, p.y, false);
+    this._ghostAt(c);
+  }
+  _ghostAt(c) {
+    this.ghost = { x: c.x - Math.floor(this.stamp.w / 2), y: c.y - Math.floor(this.stamp.h / 2) };
+    this._dirty();
+  }
+  setStamp(s) { this.stamp = s; this.ghost = null; if (s && this.hoverCell) this._ghostAt(this.hoverCell); this._dirty(); }
+  _placeStamp() {
+    if (!this.stamp || !this.ghost) return;
+    const g = this.ghost;
+    for (const [dx, dy] of this.stamp.cells) this.setCell(g.x + dx, g.y + dy, 1);
+    if (this.o.onEdit) this.o.onEdit(this);
+  }
+  _paint(x, y, val, st) {
+    const i = y * this.cols + x, old = this.cur[i];
+    if (old === val) return;
+    if (st) st.undo.push([x, y, old]);
+    this.setCell(x, y, val);
+    if (this.o.onEdit) this.o.onEdit(this);
+  }
+  _line(x0, y0, x1, y1, val, st) {
+    const [vx0, vy0, vx1, vy1] = this._vis();
+    let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy, guard = 0;
+    for (;;) {
+      if (x0 >= vx0 && y0 >= vy0 && x0 < vx1 && y0 < vy1) this._paint(x0, y0, val, st);
+      if ((x0 === x1 && y0 === y1) || ++guard > 5000) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x0 += sx; }
+      if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+  }
+
+  _down(e) {
+    const cam = this.o.mode === 'camera';
+    if (e.pointerType === 'mouse' && (e.button > 2 || (!cam && e.button !== 0))) return;
+    try { this.canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    const p = this._pt(e);
+    this.ptrs.set(e.pointerId, { x: p.x, y: p.y });
+    this.kcur = null;
+    if (cam && document.activeElement !== this.canvas) this.canvas.focus({ preventScroll: true });
+    if (this.ptrs.size >= 2) { if (cam) this._startGesture(); return; }
+    const mouse = e.pointerType === 'mouse';
+    if (cam && (e.button === 1 || e.button === 2 || this.spaceHeld || this.tool === 'pan')) {
+      if (this.spaceHeld) this.spaceUsed = true;
+      this.stroke = { kind: 'pan', lx: p.x, ly: p.y };
+      this.canvas.style.cursor = 'grabbing';
+      e.preventDefault();
+      return;
+    }
+    if (this.stamp) {
+      this._ghostTo(p);
+      if (mouse) { this._placeStamp(); this.stroke = { kind: 'none' }; } else this.stroke = { kind: 'stamp' };
+      return;
+    }
+    if (!cam && !mouse) { this.stroke = { kind: 'tap', sx: p.x, sy: p.y, moved: false }; return; }
+    const cell = this._cellAt(p.x, p.y);
+    if (!cell) { this.stroke = { kind: 'none' }; return; }
+    const val = this.tool === 'erase' ? 0 : this.tool === 'draw' ? 1 : (this.cur[cell.y * this.cols + cell.x] ? 0 : 1);
+    this.stroke = { kind: 'paint', val, lx: cell.x, ly: cell.y, t0: performance.now(), undo: [] };
+    this._paint(cell.x, cell.y, val, this.stroke);
+    this._setHover(cell);
+  }
+  _move(e) {
+    const p = this._pt(e), rec = this.ptrs.get(e.pointerId);
+    if (rec) { rec.x = p.x; rec.y = p.y; }
+    if (this.gesture && this.ptrs.size >= 2) { this._updateGesture(); return; }
+    const s = this.stroke;
+    if (s && s.kind === 'pan') {
+      this.ox += p.x - s.lx; this.oy += p.y - s.ly; s.lx = p.x; s.ly = p.y; this._clampPan(); this._dirty(); return;
+    }
+    if (s && s.kind === 'paint') {
+      const c = this._cellAt(p.x, p.y, false);
+      this._line(s.lx, s.ly, c.x, c.y, s.val, s);
+      s.lx = c.x; s.ly = c.y;
+      const v = this._cellAt(p.x, p.y); if (v) this._setHover(v);
+      return;
+    }
+    if (s && s.kind === 'stamp') { this._ghostTo(p); return; }
+    if (s && s.kind === 'tap') { if (Math.hypot(p.x - s.sx, p.y - s.sy) > 8) s.moved = true; return; }
+    if (e.pointerType === 'mouse' || e.pointerType === 'pen') {
+      this._setHover(this._cellAt(p.x, p.y));
+      if (this.stamp) this._ghostTo(p);
+    }
+  }
+  _up(e, cancel) {
+    const s = this.stroke, p = this._pt(e);
+    this.ptrs.delete(e.pointerId);
+    try { this.canvas.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    if (this.gesture) { if (this.ptrs.size < 2) { this.gesture = null; this.stroke = null; } return; }
+    if (s) {
+      if (s.kind === 'stamp' && !cancel) this._placeStamp();
+      else if (s.kind === 'tap' && !cancel && !s.moved) {
+        const cell = this._cellAt(p.x, p.y);
+        if (cell) { this.setCell(cell.x, cell.y, this.cur[cell.y * this.cols + cell.x] ? 0 : 1); this._setHover(cell); if (this.o.onEdit) this.o.onEdit(this); }
+      } else if (s.kind === 'pan' && this.o.mode === 'camera') this.canvas.style.cursor = this.spaceHeld ? 'grab' : (this.tool === 'pan' ? 'grab' : 'crosshair');
+    }
+    this.stroke = null;
+  }
+  _startGesture() {
+    const s = this.stroke;
+    if (s && s.kind === 'paint' && performance.now() - s.t0 < 300) {
+      for (let k = s.undo.length - 1; k >= 0; k--) this.setCell(s.undo[k][0], s.undo[k][1], s.undo[k][2]);
+    }
+    this.stroke = null;
+    const [a, b] = [...this.ptrs.values()];
+    this.gesture = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+  }
+  _updateGesture() {
+    const [a, b] = [...this.ptrs.values()], g = this.gesture;
+    const d = Math.hypot(a.x - b.x, a.y - b.y) || 1, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    this.ox += mx - g.mx; this.oy += my - g.my;
+    this.zoomAt(mx, my, d / g.d);
+    g.d = d; g.mx = mx; g.my = my;
+  }
+  _wheel(e) {
+    e.preventDefault();
+    const p = this._pt(e);
+    const dy = clamp(e.deltaY * (e.deltaMode === 1 ? 16 : 1), -120, 120);
+    this.zoomAt(p.x, p.y, Math.exp(-dy * 0.0018));
+  }
+  _key(e) {
+    const dirs = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    const cam = this.o.mode === 'camera';
+    if (dirs[e.key]) {
+      const d = dirs[e.key], [a, b, c, f] = this._vis();
+      if (!this.kcur) this.kcur = this.hoverCell ? { ...this.hoverCell } : this._defaultCursor();
+      else this.kcur = { x: clamp(this.kcur.x + d[0], a, c - 1), y: clamp(this.kcur.y + d[1], b, f - 1) };
+      this._setHover(this.kcur);
+      if (this.stamp) this._ghostAt(this.kcur);
+      if (cam) {
+        const r = this.cellRect(this.kcur.x, this.kcur.y);
+        if (r.x < 0 || r.y < 0 || r.x + r.s > this.cssW || r.y + r.s > this.cssH) {
+          this.ox = this.cssW / 2 - (this.kcur.x + 0.5) * this.cs; this.oy = this.cssH / 2 - (this.kcur.y + 0.5) * this.cs; this._clampPan();
+        }
+      }
+      this._dirty(); e.preventDefault(); return;
+    }
+    if (e.key === 'Enter' || (e.key === ' ' && !cam)) {
+      if (!this.kcur) { this.kcur = this._defaultCursor(); this._setHover(this.kcur); this._dirty(); e.preventDefault(); return; }
+      if (this.stamp) { this._ghostAt(this.kcur); this._placeStamp(); }
+      else {
+        const k = this.kcur, v = this.tool === 'erase' ? 0 : this.tool === 'draw' ? 1 : (this.getCell(k.x, k.y) ? 0 : 1);
+        this.setCell(k.x, k.y, v);
+        if (this.o.onEdit) this.o.onEdit(this);
+      }
+      e.preventDefault();
+    }
+  }
+}
+
+/* ==========================================================================
+   Pattern library (RLE strings)
+   ========================================================================== */
+const PATTERNS = {
+  block: { name: 'Block', cat: 'Still life', period: 1, size: [7, 7], speed: 6, rle: '2o$2o!', note: 'Four cells in a square. Each has exactly three neighbors, so nothing ever changes.' },
+  beehive: { name: 'Beehive', cat: 'Still life', period: 1, size: [9, 8], speed: 6, rle: 'b2o$o2bo$b2o!', note: 'Six cells in a hexagon, and one of the most common still lifes to emerge from chaos.' },
+  loaf: { name: 'Loaf', cat: 'Still life', period: 1, size: [8, 8], speed: 6, rle: 'b2o$o2bo$bobo$2bo!', note: 'Seven cells shaped like a tiny loaf of bread.' },
+  boat: { name: 'Boat', cat: 'Still life', period: 1, size: [7, 7], speed: 6, rle: '2o$obo$bo!', note: 'The only still life that has exactly five cells.' },
+  blinker: { name: 'Blinker', cat: 'Oscillator', period: 2, size: [7, 7], speed: 4, rle: '3o!', note: 'The smallest oscillator: three cells flip between a row and a column.' },
+  toad: { name: 'Toad', cat: 'Oscillator', period: 2, size: [8, 8], speed: 4, rle: 'b3o$3o!', note: 'Two staggered rows of three that trade places every generation.' },
+  beacon: { name: 'Beacon', cat: 'Oscillator', period: 2, size: [9, 9], speed: 4, rle: '2o$2o$2b2o$2b2o!', note: 'Two blocks touching at the corners, blinking their inner corners on and off.' },
+  pulsar: { name: 'Pulsar', cat: 'Oscillator', period: 3, size: [17, 17], speed: 5, rle: '2b3o3b3o2b2$o4bobo4bo$o4bobo4bo$o4bobo4bo$2b3o3b3o2b2$2b3o3b3o2b$o4bobo4bo$o4bobo4bo$o4bobo4bo2$2b3o3b3o!', note: 'The most common period-3 oscillator, and a favorite for its symmetry.' },
+  pentadecathlon: { name: 'Pentadecathlon', cat: 'Oscillator', period: 15, size: [20, 14], speed: 8, rle: '2bo4bo2b$2ob4ob2o$2bo4bo!', note: 'Starts as a plain row of ten cells, then cycles through a 15-generation dance.' },
+  glider: { name: 'Glider', cat: 'Spaceship', period: 4, size: [12, 12], speed: 8, rle: 'bob$2bo$3o!', note: 'The classic: five cells that crawl diagonally one square every 4 generations (speed c/4).' },
+  lwss: { name: 'Lightweight spaceship', short: 'LWSS', cat: 'Spaceship', period: 4, size: [18, 9], speed: 8, rle: 'bo2bo$o4b$o3bo$4o!', note: 'Glides sideways at half the speed of light (c/2), shedding no debris.' },
+  mwss: { name: 'Middleweight spaceship', short: 'MWSS', cat: 'Spaceship', period: 4, size: [18, 10], speed: 8, rle: '3bo2b$bo3bo$o5b$o4bo$5o!', note: 'The LWSS\'s bigger sibling: also c/2, with one more cell of body.' },
+  // extras: only in the sandbox stamp picker
+  rpentomino: { name: 'R-pentomino', cat: 'Methuselah', zoo: false, rle: 'b2o$2ob$bo!' },
+  acorn: { name: 'Acorn', cat: 'Methuselah', zoo: false, rle: 'bo5b$3bo3b$2o2b3o!' },
+  diehard: { name: 'Diehard', cat: 'Methuselah', zoo: false, rle: '6bo$2o6b$bo3b3o!' },
+  gun: { name: 'Gosper glider gun', cat: 'Gun', zoo: false, rle: '24bo11b$22bobo11b$12b2o6b2o12b2o$11bo3bo4b2o12b2o$2o8bo5bo3b2o14b$2o8bo3bob2o4bobo11b$10bo5bo7bo11b$11bo3bo20b$12b2o!' },
+  replicator: { name: 'Replicator (HighLife)', cat: 'Replicator', zoo: false, rule: 'B36/S23', rle: '2b3o$bo2bo$o3bo$o2bob$3o!' },
+};
+
+/* ==========================================================================
+   Theme + shared page behaviour
+   ========================================================================== */
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  const btn = $('#themeToggle');
+  btn.setAttribute('aria-label', t === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
+  btn.firstElementChild.textContent = t === 'dark' ? '☀' : '☾';
+  readTheme();
+  for (const b of Sched.boards) b._dirty();
+  redrawSparks();
+}
+const sparkRedraws = [];
+function redrawSparks() { sparkRedraws.forEach((f) => f()); }
+
+/* ==========================================================================
+   Sections
+   ========================================================================== */
+let heroBoard;
+function initHero() {
+  let lastSprinkle = -1;
+  const cv = $('#cv-hero');
+  heroBoard = new LifeBoard(cv, {
+    mode: 'fill', cellSize: window.innerWidth < 600 ? 11 : 14, wrap: true, speed: 7, alpha: 0.6,
+    transparent: true, showGrid: false, trails: true, history: 0, fillDensity: 0.2, autoplay: true,
+    onTick: ({ generation, population, board }) => {
+      if (generation === lastSprinkle) return;
+      if ((generation && generation % 240 === 0) || population < board.cols * board.rows * 0.015) {
+        lastSprinkle = generation;
+        // keep the backdrop lively: sprinkle a random patch
+        const w = Math.max(8, board.cols >> 2), h = Math.max(8, board.rows >> 2);
+        const sx = Math.floor(Math.random() * (board.cols - w)), sy = Math.floor(Math.random() * (board.rows - h));
+        for (let y = sy; y < sy + h; y++) for (let x = sx; x < sx + w; x++) if (Math.random() < 0.3) board.setCell(x, y, 1);
+      }
+    },
+  });
+  heroBoard.randomize(0.2);
+}
+
+function initGrid() {
+  const count = $('#grid-count');
+  const heart = ascii(['..........', '..##..##..', '.########.', '.########.', '..######..', '...####...', '....##....', '..........', '..........', '..........']);
+  const b = new LifeBoard($('#cv-grid'), {
+    cols: 10, rows: 10, wrap: false, maxCell: 46, interactive: true, cells: heart, history: 0,
+    onTick: (s) => { count.textContent = s.population; },
+  });
+  count.textContent = b.pop;
+  $('#grid-rand').addEventListener('click', () => { b.randomize(0.35); });
+  $('#grid-clear').addEventListener('click', () => { b.clear(); });
+}
+
+function initNeighbors() {
+  const cntEl = $('#nb-count'), posEl = $('#nb-pos');
+  let b;
+  const upd = () => {
+    const h = b.hoverCell;
+    if (!h) { cntEl.textContent = '–'; posEl.textContent = 'Hover or tap a cell'; return; }
+    cntEl.textContent = b.neighbors(h.x, h.y);
+    posEl.textContent = 'Cell (' + (h.x + 1) + ', ' + (h.y + 1) + ') is ' + (b.getCell(h.x, h.y) ? 'alive' : 'dead');
+  };
+  const D = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
+  const seed = ascii(['.........', '.#..#....', '...#..#..', '.##...#..', '....#....', '..#..##..', '.........', '.#....#..', '.........']);
+  b = new LifeBoard($('#cv-nb'), {
+    cols: 9, rows: 9, wrap: false, maxCell: 46, interactive: true, cells: seed, history: 0,
+    onHover: upd, onTick: upd,
+    overlay: (ctx, bd) => {
+      const h = bd.hoverCell;
+      if (!h) return;
+      ctx.fillStyle = T.tint;
+      for (const [dx, dy] of D) {
+        const x = h.x + dx, y = h.y + dy;
+        if (x < 0 || y < 0 || x >= bd.cols || y >= bd.rows) continue;
+        const r = bd.cellRect(x, y);
+        ctx.fillRect(r.x, r.y, r.s, r.s);
+        ctx.strokeStyle = T.accent; ctx.lineWidth = 1; ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.s - 1, r.s - 1);
+      }
+      const f = bd.cellRect(h.x, h.y);
+      ctx.strokeStyle = T.text; ctx.lineWidth = 3; ctx.strokeRect(f.x + 1.5, f.y + 1.5, f.s - 3, f.s - 3);
+    },
+  });
+  upd();
+}
+
+const RULE_CARDS = [
+  { id: 'under', title: 'Underpopulation', text: 'A live cell with <b>fewer than 2</b> live neighbors dies, as if by loneliness.',
+    rows: ['.....', '.....', '..#..', '..#..', '.....'] },
+  { id: 'survive', title: 'Survival', text: 'A live cell with <b>2 or 3</b> live neighbors lives on to the next generation.',
+    rows: ['.....', '..#..', '.##..', '.....', '.....'] },
+  { id: 'over', title: 'Overpopulation', text: 'A live cell with <b>more than 3</b> live neighbors dies, as if by crowding.',
+    rows: ['.....', '..#..', '.###.', '..#..', '.....'] },
+  { id: 'repro', title: 'Reproduction', text: 'A dead cell with <b>exactly 3</b> live neighbors becomes a live cell.',
+    rows: ['.....', '.##..', '.#...', '.....', '.....'] },
+];
+const rulePlayers = [];
+function initRules() {
+  const grid = $('#rulesGrid');
+  grid.innerHTML = RULE_CARDS.map((r, i) => `
+    <article class="rule-card" id="rule-${r.id}">
+      <h3><span class="num" aria-hidden="true">${i + 1}</span>${r.title}</h3>
+      <p>${r.text}</p>
+      <div class="board-box"><canvas role="img" aria-label="${r.title} example"></canvas></div>
+      <div class="outcome" aria-live="polite"></div>
+      <div class="rule-bar">
+        <div role="radiogroup" aria-label="${r.title}: generation" style="display:flex;gap:8px">
+          <label class="chip"><input type="radio" name="rc-${r.id}" value="0" checked><span class="dot" aria-hidden="true"></span>Before</label>
+          <label class="chip"><input type="radio" name="rc-${r.id}" value="1"><span class="dot" aria-hidden="true"></span>After</label>
+        </div>
+        <button class="btn" type="button" aria-pressed="false">▶ Play</button>
+      </div>
+    </article>`).join('');
+  RULE_CARDS.forEach((r) => {
+    const card = $('#rule-' + r.id), cv = $('canvas', card), out = $('.outcome', card);
+    const radios = $$('input[type=radio]', card), btn = $('.btn', card);
+    const F = [2, 2];
+    const b = new LifeBoard(cv, {
+      cols: 5, rows: 5, wrap: false, maxCell: 40, cells: ascii(r.rows), history: 4, showGrid: true,
+      overlay: (ctx, bd) => {
+        ctx.fillStyle = T.tint;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          const q = bd.cellRect(F[0] + dx, F[1] + dy);
+          ctx.fillRect(q.x, q.y, q.s, q.s);
+        }
+        const f = bd.cellRect(F[0], F[1]);
+        ctx.strokeStyle = T.text; ctx.lineWidth = 3; ctx.strokeRect(f.x + 1.5, f.y + 1.5, f.s - 3, f.s - 3);
+      },
+    });
+    const describe = () => {
+      const alive = b.getCell(F[0], F[1]), n = b.neighbors(F[0], F[1]);
+      const label = r.title + ', ' + (b.gen ? 'after' : 'before') + ': the outlined center cell is ' + (alive ? 'alive' : 'dead') + ' with ' + n + ' live neighbor' + (n === 1 ? '' : 's') + '.';
+      cv.setAttribute('aria-label', label);
+      out.textContent = (b.gen ? 'After: ' : 'Before: ') + 'center is ' + (alive ? 'ALIVE' : 'DEAD') + ', ' + n + ' live neighbor' + (n === 1 ? '' : 's');
+    };
+    const show = (after) => {
+      b.reset(); if (after) b.step();
+      radios[after ? 1 : 0].checked = true;
+      describe();
+    };
+    radios.forEach((rd) => rd.addEventListener('change', () => { stop(); show(rd.value === '1'); }));
+    let timer = 0;
+    const stop = () => { clearInterval(timer); timer = 0; btn.setAttribute('aria-pressed', 'false'); btn.textContent = '▶ Play'; };
+    btn.addEventListener('click', () => {
+      if (timer) { stop(); return; }
+      btn.setAttribute('aria-pressed', 'true'); btn.textContent = '❚❚ Pause';
+      show(b.gen === 0);
+      timer = setInterval(() => { if (b.visible) show(b.gen === 0); }, 1300);
+    });
+    rulePlayers.push({ b, show });
+    show(false);
+  });
+}
+
+function initSteps() {
+  const R = PATTERNS.rpentomino.rle;
+  const gen = $('#step-gen'), popEl = $('#step-pop'), scrub = $('#step-scrub');
+  const playBtn = $('#step-play'), back = $('#step-back');
+  const b = new LifeBoard($('#cv-step'), {
+    cols: 20, rows: 20, wrap: true, maxCell: 26, pattern: R, history: 200, showChanges: true, speed: 4,
+    onTick: (s) => {
+      gen.textContent = s.generation; popEl.textContent = s.population;
+      scrub.max = b.histLen(); scrub.value = b.past.length;
+      back.disabled = !b.past.length;
+      scrub.setAttribute('aria-valuetext', 'Generation ' + s.generation);
+    },
+    onState: (p) => { playBtn.textContent = p ? 'Pause' : 'Play'; },
+  });
+  back.disabled = true;
+  $('#step-next').addEventListener('click', () => b.step());
+  back.addEventListener('click', () => b.stepBack());
+  playBtn.addEventListener('click', () => b.toggle());
+  scrub.addEventListener('input', () => { b.pause(); b.scrubTo(+scrub.value); });
+  const chk = $('#step-changes');
+  chk.addEventListener('change', () => { b.setOption('showChanges', chk.checked); });
+  b.setOption('showChanges', chk.checked);
+  window.__stepBoard = b;
+}
+
+const zooBoards = {};
+function initZoo() {
+  const grid = $('#zooGrid');
+  let html = '', lastCat = '';
+  for (const [key, p] of Object.entries(PATTERNS)) {
+    if (p.zoo === false) continue;
+    if (p.cat !== lastCat) { html += `<h3 class="zoo-cat">${p.cat === 'Still life' ? 'Still lifes' : p.cat + 's'}</h3>`; lastCat = p.cat; }
+    const per = p.period === 1 ? 'Still' : 'Period ' + p.period;
+    html += `<article class="zoo-card" data-key="${key}">
+      <div class="board-box"><canvas role="img" aria-label="${p.name}, a ${p.cat.toLowerCase()}${p.period > 1 ? ' with period ' + p.period : ''}."></canvas></div>
+      <h3>${p.name}</h3>
+      <div class="tags"><span class="tag">${p.cat}</span><span class="tag">${per}</span></div>
+      <p>${p.note}</p>
+      <div class="zoo-actions"><button class="btn" type="button" data-act="play">Play</button><button class="btn" type="button" data-act="try">Try in sandbox</button></div>
+    </article>`;
+  }
+  grid.innerHTML = html;
+  $$('.zoo-card', grid).forEach((card) => {
+    const key = card.dataset.key, p = PATTERNS[key], btn = $('[data-act=play]', card);
+    const b = new LifeBoard($('canvas', card), {
+      cols: p.size[0], rows: p.size[1], wrap: true, maxCell: 26, pattern: p.rle, speed: p.speed, trails: true,
+      loop: p.period > 1 ? p.period * Math.ceil(240 / p.period) : 0, history: 0, autoplay: true,
+      onState: (pl) => { btn.textContent = pl ? 'Pause' : 'Play'; },
+    });
+    btn.textContent = b.playing ? 'Pause' : 'Play';
+    btn.addEventListener('click', () => b.toggle());
+    $('[data-act=try]', card).addEventListener('click', () => Sandbox.tryPattern(key));
+    zooBoards[key] = b;
+  });
+}
+
+function initEmergence() {
+  // Demo A: Gosper gun with a hidden margin that eats gliders as they leave the view
+  const gp = $('#gun-play'), ggen = $('#gun-gen'), gpop = $('#gun-pop');
+  const M = 6;
+  const gun = new LifeBoard($('#cv-gun'), {
+    cols: 56 + 2 * M, rows: 34 + 2 * M, margin: M, sink: 3, wrap: false, maxCell: 14, speed: 24, trails: true,
+    pattern: PATTERNS.gun.rle, patternPos: [M + 2, M + 2], history: 0, autoplay: true,
+    onTick: (s) => { ggen.textContent = s.generation; gpop.textContent = s.population; },
+    onState: (p) => { gp.textContent = p ? 'Pause' : 'Play'; },
+  });
+  gp.textContent = gun.playing ? 'Pause' : 'Play';
+  gp.addEventListener('click', () => gun.toggle());
+  $('#gun-restart').addEventListener('click', () => { gun.reset(); gun.play(); });
+
+  // Demo B: random soup + population sparkline
+  const sg = $('#soup-gen'), sp = $('#soup-pop'), spark = $('#soup-spark'), sb = $('#soup-play');
+  let lastSpark = 0;
+  const draw = () => { drawSpark(spark, soup.series()); };
+  const soup = new LifeBoard($('#cv-soup'), {
+    cols: 56, rows: 36, wrap: true, maxCell: 14, speed: 40, trails: true, showGrid: false, history: 600, autoplay: true,
+    onTick: (s) => {
+      sg.textContent = s.generation; sp.textContent = s.population;
+      const now = performance.now();
+      if (now - lastSpark > 120) { lastSpark = now; draw(); }
+    },
+    onState: (p) => { sb.textContent = p ? 'Pause' : 'Play'; },
+  });
+  soup.randomize(0.35);
+  sparkRedraws.push(draw);
+  sb.textContent = soup.playing ? 'Pause' : 'Play';
+  sb.addEventListener('click', () => soup.toggle());
+  $('#soup-new').addEventListener('click', () => { soup.randomize(0.35); soup.play(); });
+  new ResizeObserver(draw).observe(spark);
+}
+
+/* ==========================================================================
+   Sandbox
+   ========================================================================== */
+const Sandbox = (() => {
+  let board, stampKey = '', rot = 0, flip = false, boot = false;
+  let hot = false, lastAnnounce = 0, lastSpark = 0, msgTimer = 0;
+  const el = (id) => document.getElementById(id);
+  const PRESETS = ['B3/S23', 'B36/S23', 'B2/S', 'B3678/S34678'];
+  const speedMaxLen = 6;
+
+  function msg(text, err = false) {
+    const m = el('sb-msg');
+    m.textContent = text; m.classList.toggle('err', err);
+    clearTimeout(msgTimer);
+    if (text) msgTimer = setTimeout(() => { m.textContent = ''; }, 6000);
+  }
+  function announce(force) {
+    const now = performance.now();
+    if (!force && now - lastAnnounce < 1000) return;
+    lastAnnounce = now;
+    const t = 'Generation ' + board.gen + ', population ' + board.pop;
+    el('sb-live').textContent = t;
+    board.canvas.setAttribute('aria-label', 'Sandbox board, ' + board.cols + ' by ' + board.rows + ' cells, rule ' + board.ruleStr + '. ' + t + '.');
+  }
+  function stats() {
+    el('sb-gen').textContent = board.gen; el('sb-pop').textContent = board.pop;
+    const now = performance.now();
+    if (now - lastSpark > 100) { lastSpark = now; drawSpark(el('sb-spark'), board.series()); }
+    if (board.playing) announce(false);
+  }
+  function syncRuleUI() {
+    const r = board.ruleStr;
+    el('sb-rule').value = r; el('sb-rule').removeAttribute('aria-invalid');
+    el('sb-preset').value = PRESETS.includes(r) ? r : 'custom';
+  }
+  function setRule(str, quiet) {
+    const p = parseRule(str);
+    const inp = el('sb-rule'), note = el('sb-rule-msg');
+    if (!p) {
+      inp.setAttribute('aria-invalid', 'true');
+      note.textContent = 'Use B/S notation, e.g. B3/S23 (digits 0–8).'; note.classList.add('err');
+      return false;
+    }
+    note.textContent = ''; note.classList.remove('err');
+    board.setRule(p.str); syncRuleUI();
+    if (!quiet) msg('Rule set to ' + p.str + '.');
+    return true;
+  }
+
+  /* ---- stamp ---- */
+  function updateStamp() {
+    const hint = el('sb-hint');
+    if (!stampKey) {
+      board.setStamp(null);
+      hint.textContent = 'Draw with a click or touch. Right-drag, Space+drag, or two fingers to pan; wheel or pinch to zoom.';
+      return;
+    }
+    const p = PATTERNS[stampKey], t = transformCells(parseRLE(p.rle).cells, rot, flip);
+    board.setStamp({ cells: t.cells, w: t.w, h: t.h });
+    hint.textContent = 'Stamp: ' + p.name + (rot ? ' · rotated ' + rot * 90 + '°' : '') + (flip ? ' · flipped' : '') +
+      '. Click or tap to place it (on touch, drag then lift). R rotates, F flips, Esc cancels.';
+  }
+  function chooseStamp(key, quiet) {
+    stampKey = key; el('sb-pattern').value = key;
+    el('sb-rotate').disabled = el('sb-flip').disabled = !key;
+    if (key && PATTERNS[key].rule && PATTERNS[key].rule !== board.ruleStr && !quiet) {
+      setRule(PATTERNS[key].rule, true); msg('Switched to rule ' + PATTERNS[key].rule + ', which this pattern needs.');
+    }
+    updateStamp();
+  }
+  const rotate = () => { if (!stampKey) return; rot = (rot + 1) & 3; updateStamp(); };
+  const doFlip = () => { if (!stampKey) return; flip = !flip; updateStamp(); };
+
+  /* ---- import / export / share ---- */
+  function loadState({ rle, rule, wrap }) {
+    const res = parseRLE(rle);
+    if (!res.cells.length && !/!/.test(rle)) return { ok: false, msg: 'That doesn\'t look like RLE.' };
+    if (rule || res.rule) {
+      if (!setRule(rule || res.rule, true)) { if (!rule) return { ok: false, msg: 'Unknown rule "' + (rule || res.rule) + '".' }; }
+    }
+    if (wrap != null) { board.setWrap(wrap); el('sb-wrap').checked = !!wrap; }
+    board.clear();
+    let x, y, clipped = false;
+    if (res.pos && res.pos[0] >= 0 && res.pos[1] >= 0 && res.pos[0] + res.w <= board.cols && res.pos[1] + res.h <= board.rows) { x = res.pos[0]; y = res.pos[1]; }
+    else {
+      x = Math.floor((board.cols - res.w) / 2); y = Math.floor((board.rows - res.h) / 2);
+      if (res.w > board.cols || res.h > board.rows) clipped = true;
+    }
+    board.setCells(res.cells, x, y);
+    board.captureSeed(); board.gen = 0; board.future = []; board._dirty(); board._emit();
+    announce(true);
+    return { ok: true, msg: clipped ? 'Loaded, but the pattern is larger than the board so some cells were clipped.' : 'Loaded ' + board.pop + ' cells.', clipped };
+  }
+  function shareURL() {
+    const p = new URLSearchParams();
+    p.set('rule', board.ruleStr); p.set('wrap', board.wrap ? '1' : '0'); p.set('rle', board.toRLE());
+    return location.href.split('#')[0] + '#' + p.toString();
+  }
+  async function copyText(t) {
+    try { await navigator.clipboard.writeText(t); return true; } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = t; ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+      document.body.appendChild(ta); ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+      ta.remove(); return ok;
+    }
+  }
+  function applyHash() {
+    const h = location.hash.slice(1);
+    if (!h || h.indexOf('rle=') < 0) return false;
+    let p;
+    try { p = new URLSearchParams(h); } catch (e) { return false; }
+    const rle = p.get('rle');
+    if (!rle) return false;
+    const r = loadState({ rle, rule: p.get('rule'), wrap: p.has('wrap') ? p.get('wrap') === '1' : null });
+    msg(r.ok ? 'Loaded the shared board. ' + r.msg : r.msg, !r.ok);
+    return r.ok;
+  }
+
+  /* ---- public: zoo -> sandbox ---- */
+  function tryPattern(key) {
+    const p = PATTERNS[key];
+    if (!p) return;
+    setRule('B3/S23', true);
+    board.clear();
+    const c = board.centerCell(), t = transformCells(parseRLE(p.rle).cells);
+    board.setCells(t.cells, c.x - (t.w >> 1), c.y - (t.h >> 1));
+    board.captureSeed();
+    chooseStamp('', true);
+    if (!reduced()) board.play();
+    announce(true);
+    msg(p.name + ' placed in the sandbox.');
+    el('sandbox').scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' });
+  }
+  function tryRule(rule) {
+    setRule(rule, true);
+    board.clear(); board.randomize(0.3);
+    board.setWrap(true); el('sb-wrap').checked = true;
+    chooseStamp('', true);
+    if (!reduced()) board.play();
+    msg('Random soup under ' + rule + '.');
+    el('sandbox').scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' });
+  }
+
+  function init() {
+    board = new LifeBoard(el('sb-canvas'), {
+      cols: 200, rows: 120, mode: 'camera', wrap: true, speed: 10, interactive: true, tool: 'draw',
+      showGrid: true, trails: true, history: 200, minCell: 1.5, maxZoom: 48,
+      pattern: PATTERNS.rpentomino.rle,
+      onTick: stats,
+      onState: (p) => { el('sb-play').textContent = p ? 'Pause' : 'Play'; announce(true); },
+    });
+    el('sb-canvas').setAttribute('aria-label', 'Sandbox board, 200 by 120 cells, rule B3/S23. Generation 0, population ' + board.pop + '.');
+
+    // pattern picker
+    const sel = el('sb-pattern'), groups = {};
+    for (const [k, p] of Object.entries(PATTERNS)) {
+      const g = groups[p.cat] || (groups[p.cat] = document.createElement('optgroup'));
+      g.label = p.cat;
+      const o = document.createElement('option'); o.value = k; o.textContent = p.name; g.appendChild(o);
+    }
+    Object.values(groups).forEach((g) => sel.appendChild(g));
+    sel.addEventListener('change', () => { rot = 0; flip = false; chooseStamp(sel.value); });
+    el('sb-rotate').disabled = el('sb-flip').disabled = true;
+    el('sb-rotate').addEventListener('click', rotate);
+    el('sb-flip').addEventListener('click', doFlip);
+
+    // transport
+    el('sb-play').addEventListener('click', () => board.toggle());
+    el('sb-step').addEventListener('click', () => { board.pause(); board.step(); });
+    el('sb-back').addEventListener('click', () => { board.pause(); board.stepBack(); });
+    el('sb-clear').addEventListener('click', () => { board.clear(); announce(true); });
+    const dens = el('sb-density');
+    dens.addEventListener('input', () => { el('sb-density-val').textContent = dens.value + '%'; });
+    el('sb-random').addEventListener('click', () => { board.randomize(+dens.value / 100); announce(true); });
+    const spd = el('sb-speed');
+    spd.addEventListener('input', () => { board.setSpeed(+spd.value); el('sb-speed-val').textContent = spd.value + ' gen/s'; });
+    el('sb-zoom-in').addEventListener('click', () => board.zoomAt(board.cssW / 2, board.cssH / 2, 1.3));
+    el('sb-zoom-out').addEventListener('click', () => board.zoomAt(board.cssW / 2, board.cssH / 2, 1 / 1.3));
+    el('sb-fit').addEventListener('click', () => board.fitView(5));
+
+    // tools
+    $$('input[name=sb-tool]').forEach((r) => r.addEventListener('change', () => { if (r.checked) board.setTool(r.value); }));
+
+    // rules
+    el('sb-preset').addEventListener('change', (e) => {
+      const v = e.target.value;
+      if (v === 'custom') { el('sb-rule').focus(); el('sb-rule').select(); return; }
+      setRule(v);
+    });
+    const ruleInp = el('sb-rule');
+    const applyRule = () => { if (!setRule(ruleInp.value)) return; };
+    ruleInp.addEventListener('change', applyRule);
+    ruleInp.addEventListener('keydown', (e) => { if (e.key === 'Enter') applyRule(); });
+    ruleInp.addEventListener('input', () => {
+      const ok = parseRule(ruleInp.value);
+      if (ok) { ruleInp.removeAttribute('aria-invalid'); el('sb-rule-msg').textContent = ''; }
+    });
+
+    // toggles
+    el('sb-wrap').addEventListener('change', (e) => board.setWrap(e.target.checked));
+    el('sb-gridlines').addEventListener('change', (e) => board.setOption('showGrid', e.target.checked));
+    el('sb-age').addEventListener('change', (e) => board.setOption('colorByAge', e.target.checked));
+    el('sb-trails').addEventListener('change', (e) => board.setOption('trails', e.target.checked));
+
+    // import / export / share
+    const io = el('sb-io'), ta = el('sb-io-text');
+    const openIO = (open) => { io.hidden = !open; el('sb-import').setAttribute('aria-expanded', String(open)); };
+    el('sb-export').addEventListener('click', async () => {
+      const rle = board.toRLE();
+      ta.value = rle; openIO(true);
+      msg((await copyText(rle)) ? 'RLE copied to the clipboard.' : 'Copy failed — select the text below and copy it manually.', false);
+    });
+    el('sb-import').addEventListener('click', () => {
+      if (io.hidden) { ta.value = ''; openIO(true); ta.focus(); } else openIO(false);
+    });
+    el('sb-io-apply').addEventListener('click', () => {
+      const r = loadState({ rle: ta.value });
+      msg(r.msg, !r.ok);
+      if (r.ok) openIO(false);
+    });
+    el('sb-io-copy').addEventListener('click', async () => { msg((await copyText(ta.value)) ? 'Copied.' : 'Copy failed.'); });
+    el('sb-io-close').addEventListener('click', () => openIO(false));
+    el('sb-share').addEventListener('click', async () => {
+      const url = shareURL();
+      try { history.replaceState(null, '', url); } catch (e) { /* e.g. sandboxed frames */ }
+      msg((await copyText(url)) ? 'Share link copied to the clipboard (it is also in the address bar).' : 'Share link is now in the address bar — copy it from there.');
+    });
+
+    // "going further" rule buttons
+    $$('#ruleLinks [data-rule]').forEach((b) => b.addEventListener('click', () => tryRule(b.dataset.rule)));
+
+    // keyboard (scoped to the sandbox)
+    document.addEventListener('pointerdown', (e) => { hot = !!e.target.closest('#sandbox'); }, true);
+    document.addEventListener('focusin', (e) => { hot = !!e.target.closest('#sandbox'); });
+    document.addEventListener('keydown', (e) => {
+      if (!hot || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target, tag = t.tagName;
+      const typing = tag === 'TEXTAREA' || tag === 'SELECT' || (tag === 'INPUT' && !['range', 'checkbox', 'radio', 'button'].includes(t.type));
+      const k = e.key;
+      if (typing && !(tag === 'SELECT' && k === 'Escape')) return;
+      if (k === ' ') {
+        if (tag === 'BUTTON' || tag === 'INPUT' || tag === 'SUMMARY' || tag === 'A') return;
+        e.preventDefault();
+        if (!e.repeat) { board.spaceHeld = true; board.spaceUsed = false; board.canvas.style.cursor = 'grab'; }
+        return;
+      }
+      switch (k.toLowerCase()) {
+        case 'n': board.pause(); board.step(); break;
+        case 'b': board.pause(); board.stepBack(); break;
+        case 'c': board.clear(); announce(true); break;
+        case 'r': rotate(); break;
+        case 'f': doFlip(); break;
+        case '+': case '=': board.zoomAt(board.cssW / 2, board.cssH / 2, 1.25); break;
+        case '-': case '_': board.zoomAt(board.cssW / 2, board.cssH / 2, 1 / 1.25); break;
+        case 'escape': if (stampKey) chooseStamp(''); break;
+        default: return;
+      }
+      e.preventDefault();
+    });
+    document.addEventListener('keyup', (e) => {
+      if (e.key === ' ' && board.spaceHeld) {
+        board.spaceHeld = false;
+        board.canvas.style.cursor = board.tool === 'pan' ? 'grab' : 'crosshair';
+        if (!board.spaceUsed) { board.toggle(); }
+      }
+    });
+
+    sparkRedraws.push(() => drawSpark(el('sb-spark'), board.series()));
+    new ResizeObserver(() => drawSpark(el('sb-spark'), board.series())).observe(el('sb-spark'));
+    stats();
+    boot = true;
+  }
+
+  return {
+    init, tryPattern, tryRule, applyHash, shareURL, loadState,
+    get board() { return board; },
+    get ready() { return boot; },
+  };
+})();
+
+/* ==========================================================================
+   Boot
+   ========================================================================== */
+function initReveal() {
+  const els = $$('.reveal');
+  if (!('IntersectionObserver' in window) || reduced()) { els.forEach((e) => e.classList.add('in')); return; }
+  const io = new IntersectionObserver((es) => {
+    for (const e of es) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+  }, { rootMargin: '0px 0px -6% 0px' });
+  els.forEach((e) => io.observe(e));
+}
+
+function start() {
+  readTheme();
+  const tb = $('#themeToggle');
+  tb.addEventListener('click', () => {
+    const t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    storage.set('life-theme', t); applyTheme(t);
+  });
+  applyTheme(document.documentElement.getAttribute('data-theme'));
+  initReveal();
+  initHero(); initGrid(); initNeighbors(); initRules(); initSteps(); initZoo(); initEmergence();
+  Sandbox.init();
+  $('#startBtn').addEventListener('click', (e) => {
+    e.preventDefault();
+    $('#grid').scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' });
+  });
+  const goHash = () => {
+    if (Sandbox.applyHash()) {
+      const go = () => $('#sandbox').scrollIntoView({ block: 'start', behavior: 'instant' });
+      go(); setTimeout(go, 250);
+    }
+  };
+  goHash();
+  window.addEventListener('hashchange', goHash);
+  RMQ.addEventListener && RMQ.addEventListener('change', () => {
+    if (reduced()) for (const b of Sched.boards) { b.pause(); b._dirty(); }
+  });
+  let rt = 0;
+  window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => redrawSparks(), 120); });
+}
+
+window.__life = { LifeBoard, parseRLE, serializeRLE, parseRule, PATTERNS, Sandbox, Sched, rulePlayers, zooBoards, get hero() { return heroBoard; } };
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})();
+</script>
+</body>
+</html>
