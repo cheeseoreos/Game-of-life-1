@@ -1663,6 +1663,12 @@ const Sandbox = (() => {
     return true;
   }
 
+  /* wrap off = open space: the outer 3 rings are absorbing so gliders vanish instead of piling up */
+  function setWrap(v, quiet) {
+    board.setWrap(v); board.o.sink = v ? 0 : 3; el('sb-wrap').checked = !!v;
+    if (!quiet) msg(v ? 'Edges wrap around.' : 'Edges are open: cells in the outer 3 rings are removed, so gliders fly off.');
+  }
+
   /* ---- stamp ---- */
   function updateStamp() {
     const hint = el('sb-hint');
@@ -1682,6 +1688,7 @@ const Sandbox = (() => {
     if (key && PATTERNS[key].rule && PATTERNS[key].rule !== board.ruleStr && !quiet) {
       setRule(PATTERNS[key].rule, true); msg('Switched to rule ' + PATTERNS[key].rule + ', which this pattern needs.');
     }
+    if (key && PATTERNS[key].cat === 'Gun' && board.wrap) { setWrap(false, true); msg('Wrap turned off so the gun\'s gliders can fly away instead of looping back into it.'); }
     updateStamp();
   }
   const rotate = () => { if (!stampKey) return; rot = (rot + 1) & 3; updateStamp(); };
@@ -1694,7 +1701,7 @@ const Sandbox = (() => {
     if (rule || res.rule) {
       if (!setRule(rule || res.rule, true)) { if (!rule) return { ok: false, msg: 'Unknown rule "' + (rule || res.rule) + '".' }; }
     }
-    if (wrap != null) { board.setWrap(wrap); el('sb-wrap').checked = !!wrap; }
+    if (wrap != null) setWrap(wrap, true);
     board.clear();
     let x, y, clipped = false;
     if (res.pos && res.pos[0] >= 0 && res.pos[1] >= 0 && res.pos[0] + res.w <= board.cols && res.pos[1] + res.h <= board.rows) { x = res.pos[0]; y = res.pos[1]; }
@@ -1752,7 +1759,7 @@ const Sandbox = (() => {
   function tryRule(rule) {
     setRule(rule, true);
     board.clear(); board.randomize(0.3);
-    board.setWrap(true); el('sb-wrap').checked = true;
+    setWrap(true, true);
     chooseStamp('', true);
     if (!reduced()) board.play();
     msg('Random soup under ' + rule + '.');
@@ -1815,7 +1822,7 @@ const Sandbox = (() => {
     });
 
     // toggles
-    el('sb-wrap').addEventListener('change', (e) => board.setWrap(e.target.checked));
+    el('sb-wrap').addEventListener('change', (e) => setWrap(e.target.checked));
     el('sb-gridlines').addEventListener('change', (e) => board.setOption('showGrid', e.target.checked));
     el('sb-age').addEventListener('change', (e) => board.setOption('colorByAge', e.target.checked));
     el('sb-trails').addEventListener('change', (e) => board.setOption('trails', e.target.checked));
