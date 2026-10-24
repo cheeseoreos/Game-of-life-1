@@ -218,6 +218,11 @@ label.lbl { font-size: .78rem; color: var(--muted); font-weight: 500; }
 details.keys { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 0 16px; }
 details.keys summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 600; font-size: .92rem; }
 details.keys dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0 0 14px; font-size: .88rem; }
+details.rules-adv { background: var(--surface2); }
+details.rules-adv[open] { padding-bottom: 14px; }
+.adv-note { margin: 0 0 12px; font-size: .88rem; color: var(--muted); }
+.rule-banner { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid var(--death); border-radius: 14px; font-size: .88rem; }
+.rule-banner[hidden] { display: none; }
 details.keys dt { font-family: var(--mono); color: var(--accent-text); }
 details.keys dd { margin: 0; color: var(--muted); }
 kbd { font: 600 .78rem var(--mono); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px; padding: 2px 6px; background: var(--surface2); }
@@ -439,6 +444,19 @@ footer { padding: 40px 0 64px; border-top: 1px solid var(--border); color: var(-
         </div>
         <div class="sb-sep" aria-hidden="true"></div>
         <div class="sb-row">
+          <label class="chip sq"><input type="checkbox" id="sb-wrap" checked><span class="dot" aria-hidden="true"></span>Wrap edges</label>
+          <label class="chip sq"><input type="checkbox" id="sb-gridlines" checked><span class="dot" aria-hidden="true"></span>Grid lines</label>
+          <label class="chip sq"><input type="checkbox" id="sb-age"><span class="dot" aria-hidden="true"></span>Color by age</label>
+          <label class="chip sq"><input type="checkbox" id="sb-trails" checked><span class="dot" aria-hidden="true"></span>Trails</label>
+        </div>
+        <div class="sb-sep" aria-hidden="true"></div>
+        <div class="rule-banner" id="sb-rule-banner" hidden role="status">
+          <span><strong>Not Conway's rules.</strong> Patterns such as the glider gun and the pattern zoo only behave as described under <span class="mono">B3/S23</span>.</span>
+          <button class="btn" id="sb-rule-reset" type="button">Back to Conway's rules</button>
+        </div>
+        <details class="keys rules-adv" id="sb-rules-adv">
+          <summary>Other rules (advanced)</summary>
+          <p class="adv-note">The game's four rules are written <span class="mono">B3/S23</span>: a cell is <b>B</b>orn with 3 neighbors and <b>S</b>urvives with 2 or 3. Changing the numbers creates a different universe. <b>Everything else on this page, including every pattern in the zoo and the Gosper glider gun, is designed for Conway's rule and will misbehave under the others.</b> Stamping a pattern switches back to the rule it needs.</p>
           <div class="sb-rule">
             <label class="lbl" for="sb-preset">Rule</label>
             <select id="sb-preset">
@@ -451,12 +469,8 @@ footer { padding: 40px 0 64px; border-top: 1px solid var(--border); color: var(-
             <label class="sr-only" for="sb-rule">Custom rule in B/S notation</label>
             <input type="text" id="sb-rule" value="B3/S23" spellcheck="false" autocomplete="off" autocapitalize="characters" aria-describedby="sb-rule-msg">
           </div>
-          <label class="chip sq"><input type="checkbox" id="sb-wrap" checked><span class="dot" aria-hidden="true"></span>Wrap edges</label>
-          <label class="chip sq"><input type="checkbox" id="sb-gridlines" checked><span class="dot" aria-hidden="true"></span>Grid lines</label>
-          <label class="chip sq"><input type="checkbox" id="sb-age"><span class="dot" aria-hidden="true"></span>Color by age</label>
-          <label class="chip sq"><input type="checkbox" id="sb-trails" checked><span class="dot" aria-hidden="true"></span>Trails</label>
-        </div>
-        <p class="sb-rule-note"><span id="sb-rule-msg" class="sb-msg" aria-live="polite"></span></p>
+          <p class="sb-rule-note"><span id="sb-rule-msg" class="sb-msg" aria-live="polite"></span></p>
+        </details>
         <div class="sb-sep" aria-hidden="true"></div>
         <div class="sb-row">
           <button class="btn" id="sb-export" type="button">Export RLE</button>
@@ -1648,6 +1662,9 @@ const Sandbox = (() => {
     const r = board.ruleStr;
     el('sb-rule').value = r; el('sb-rule').removeAttribute('aria-invalid');
     el('sb-preset').value = PRESETS.includes(r) ? r : 'custom';
+    const off = r !== 'B3/S23';
+    el('sb-rule-banner').hidden = !off;
+    if (off) el('sb-rules-adv').open = true;
   }
   function setRule(str, quiet) {
     const p = parseRule(str);
@@ -1685,10 +1702,14 @@ const Sandbox = (() => {
   function chooseStamp(key, quiet) {
     stampKey = key; el('sb-pattern').value = key;
     el('sb-rotate').disabled = el('sb-flip').disabled = !key;
-    if (key && PATTERNS[key].rule && PATTERNS[key].rule !== board.ruleStr && !quiet) {
-      setRule(PATTERNS[key].rule, true); msg('Switched to rule ' + PATTERNS[key].rule + ', which this pattern needs.');
+    const need = key ? (PATTERNS[key].rule || 'B3/S23') : null;
+    let switched = false;
+    if (need && need !== board.ruleStr && !quiet) {
+      switched = true;
+      setRule(need, true);
+      msg('Switched to ' + (need === 'B3/S23' ? "Conway's rules" : 'rule ' + need) + ', which ' + PATTERNS[key].name + ' needs.');
     }
-    if (key && PATTERNS[key].cat === 'Gun' && board.wrap) { setWrap(false, true); msg('Wrap turned off so the gun\'s gliders can fly away instead of looping back into it.'); }
+    if (key && PATTERNS[key].cat === 'Gun' && board.wrap) { setWrap(false, true); msg((switched ? 'Switched to Conway\'s rules. ' : '') + 'Wrap turned off so the gun\'s gliders can fly away instead of looping back into it.'); }
     updateStamp();
   }
   const rotate = () => { if (!stampKey) return; rot = (rot + 1) & 3; updateStamp(); };
@@ -1820,6 +1841,8 @@ const Sandbox = (() => {
       const ok = parseRule(ruleInp.value);
       if (ok) { ruleInp.removeAttribute('aria-invalid'); el('sb-rule-msg').textContent = ''; }
     });
+
+    el('sb-rule-reset').addEventListener('click', () => { setRule('B3/S23'); });
 
     // toggles
     el('sb-wrap').addEventListener('change', (e) => setWrap(e.target.checked));
